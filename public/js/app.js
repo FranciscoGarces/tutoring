@@ -265,8 +265,7 @@
     col.append(h("button", { class: "btn-o", style: "align-self:flex-start", onclick: () => go("sims") }, icon("back"), "Volver"));
     col.append(h("div", null, h("div", { class: "eyebrow", text: `Simulación · ${e.duracion || 5} min` }), h("h1", { text: e.titulo }), h("p", { class: "lead", text: e.resumen })));
     col.append(h("div", { class: "info" },
-      h("div", null, h("div", { class: "eyebrow", text: "Con quién hablás" }), h("p", { text: e.cliente })),
-      h("div", null, h("div", { class: "eyebrow", text: "Tu objetivo" }), h("p", { text: e.objetivo }))));
+      h("div", null, h("div", { class: "eyebrow", text: "Con quién hablás" }), h("p", { text: e.cliente }))));
     col.append(h("ul", { class: "tips" },
       h("li", { text: "Hablá con naturalidad. Cuando hacés una pausa, el cliente responde." }),
       h("li", { text: "Si el cliente está hablando, tocá la esfera para interrumpirlo." }),

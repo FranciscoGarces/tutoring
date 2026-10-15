@@ -922,11 +922,24 @@ registerProcessor("mic-pcm", MicPcm);`;
       }
     }
 
+    // Tope de seguridad: al cumplirse, el cliente se despide solo (ver CÓMO TERMINAR en prompts.js).
+    let capTimer = null, capIniciado = false, maxMinutos = 15;
+    function iniciarTope() {
+      if (capIniciado) return;
+      capIniciado = true;
+      capTimer = setTimeout(() => {
+        if (ended) return;
+        mandar({ realtimeInput: { text: "[SISTEMA] Se acabó el tiempo. Despedite ahora en una oración y llamá a colgar." } });
+        setTimeout(() => { if (!ended) self.stop("fin"); }, 45000);
+      }, Math.max(1, maxMinutos) * 60000);
+    }
+
     function sesionLista() {
       clearTimeout(setupTimer);
       reintentos = 0;
       if (conectado) { setState("listening"); return; }   // reconexión: la conversación sigue donde estaba
       conectado = true;
+      iniciarTope();
       // El cliente habla primero: le damos la consigna de arranque como si fuera el pie.
       setState("thinking");
       mandar({ realtimeInput: { text: primerTurno } });
@@ -944,7 +957,7 @@ registerProcessor("mic-pcm", MicPcm);`;
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voz() } } }
         },
         systemInstruction: { parts: [{ text: instrucciones }] },
-        tools: [{ functionDeclarations: [{ name: "colgar", description: "Corta la llamada. Usala solo después de despedirte, cuando la conversación llegó a un cierre natural." }] }],
+        tools: [{ functionDeclarations: [{ name: "colgar", description: "Corta la llamada. Usala solo después de despedirte, cuando la situación se resolvió o cuando te cansaste." }] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: { automaticActivityDetection: { prefixPaddingMs: 40, silenceDurationMs: 500 } },
@@ -959,6 +972,7 @@ registerProcessor("mic-pcm", MicPcm);`;
       const r = await fetch("/api/voz/token", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       let j = null; try { j = await r.json(); } catch (_) {}
       if (!r.ok || !j || !j.token) throw new Error((j && j.error && (j.error.message || j.error)) || "El servidor no pudo generar el token de Gemini Live.");
+      if (j.maxMinutos) maxMinutos = Number(j.maxMinutos) || maxMinutos;
       return j.token;
     }
 

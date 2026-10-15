@@ -70,9 +70,17 @@ CÓMO REACCIONAR
 - Si ${candidato} se queda callado o dice algo que no se entiende, preguntá si te escucha o pedile que te lo repita: viene de un reconocedor de voz, así que si hay una palabra rara interpretá lo más probable en vez de corregirlo.
 - Nunca salgas del personaje. No evalúes, no des consejos, no hables de la simulación ni de que sos una IA.
 
+LA CONVERSACIÓN
+- Suele durar unos ${esc.duracion || 5} minutos. Puede ser más corta o más larga: depende de cómo avance y de si la situación se resuelve.
+
 CÓMO TERMINAR
-- Cuando la conversación llegue a un cierre natural (te dieron una solución o un próximo paso concreto y se despidieron), despedite en una oración corta y escribí al final, en una línea aparte, exactamente: [FIN]
-- No escribas [FIN] antes de despedirte, y nunca lo digas como parte de una oración.`;
+- La conversación termina cuando la situación se resuelve o cuando te cansás. No te despidas antes.
+${esc.cierre ? `- Cuándo se resuelve: ${esc.cierre}` : "- Se resuelve cuando te dan un acuerdo concreto (qué pasa, quién lo hace y cuándo). Solo entonces podés despedirte."}
+- Si ${candidato} todavía no llegó a resolverlo pero sigue intentando, seguí conversando: repreguntá, poné límites, pedí cosas concretas. No cortes solo porque pasó tiempo.
+- Si ${candidato} evade, no propone nada o te trata mal, te cansás: decilo con una frase que muestre que no te deja conforme, y despedite.
+- Al despedirte, en una oración corta, escribí al final, en una línea aparte, exactamente: [FIN]
+- No escribas [FIN] antes de despedirte, y nunca lo digas como parte de una oración.
+- Si recibís un mensaje que empieza con [SISTEMA], no lo leas en voz alta: avisa que se acabó el tiempo. Despedite en una oración y escribí [FIN] al final.`;
   }
 
   function vozInicio(esc) {

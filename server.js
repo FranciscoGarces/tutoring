@@ -979,7 +979,8 @@ async function handleApi(req, res, url) {
   if (url.pathname === "/api/voz/token") {
     if (req.method !== "POST") return fail(res, 405, "Método no permitido");
     const r = await tokenGeminiLive();
-    return r.error ? fail(res, r.status, r.error) : json(res, 200, r);
+    const maxMinutos = Math.min(60, Math.max(1, Number(process.env.CALL_MAX_MINUTES) || 15));
+    return r.error ? fail(res, r.status, r.error) : json(res, 200, { ...r, maxMinutos });
   }
 
   if (url.pathname === "/api/empresa") {
