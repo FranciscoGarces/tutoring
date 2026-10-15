@@ -48,17 +48,18 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
 
   test("estudiante: la pantalla de inicio muestra los escenarios y el estado de la IA", async () => {
     assert.equal(await page.locator(".status").textContent(), "IA conectada · Gemini");
-    assert.equal(await page.locator(".card").count(), 3);
-    await assert.doesNotReject(page.locator(".card b", { hasText: "Recordatorios duplicados" }).waitFor());
+    assert.equal(await page.locator(".card").count(), 6);
+    await assert.doesNotReject(page.locator(".card b", { hasText: "Viernes 19:30: los recordatorios no salieron" }).waitFor());
     assert.equal(await page.locator("#candidato").inputValue(), "Lucas Ferreyra");
   });
 
   test("estudiante: el brief explica con quién habla y cuál es el objetivo", async () => {
-    await page.locator(".card").first().click();
+    await page.locator(".card", { hasText: "Viernes 19:30" }).click();
     await esperarVista("Simulación");
     const texto = await page.locator(".brief").innerText();
-    assert.match(texto, /Laura Méndez/i);
-    assert.match(texto, /tu objetivo/i);
+    assert.match(texto, /Agustina Ferrari/i);
+    assert.match(texto, /Viernes a la noche/i, "el brief muestra el resumen de la situación");
+    assert.doesNotMatch(texto, /tu objetivo/i, "el objetivo no se muestra antes de la llamada");
     assert.equal(await page.locator("#startCall").isEnabled(), true);
   });
 
@@ -71,7 +72,7 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
     // Sin micrófono el motor avisa y abre el teclado solo; igual lo abrimos por las dudas.
     if (await page.locator(".typebar").isHidden()) await page.locator('button[aria-label="Escribir en vez de hablar"]').click();
     const campo = page.locator('.typebar input[aria-label="Tu respuesta"]');
-    await campo.fill("Buen día Laura, contame desde cuándo pasa y a cuántos pacientes les pasa.");
+    await campo.fill("Buen día Agustina, contame desde cuándo pasa y a cuántos pacientes les pasa.");
     await campo.press("Enter");
     await page.waitForFunction(() => document.querySelectorAll(".transcript .ln").length >= 3, null, { timeout: 15000 });
 
@@ -91,10 +92,10 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
 
     assert.equal(await page.locator(".ring .n b").textContent(), "81");
     const criterios = await page.locator(".crit .nm").evaluateAll(ns => ns.map(n => n.firstChild.textContent));
-    assert.deepEqual(criterios, ["Escucha activa", "Preguntas para entender", "Claridad", "Empatía", "Manejo de expectativas", "Cierre y próximos pasos"]);
+    assert.deepEqual(criterios, ["Escucha y claridad", "Empatía y contención", "Cierre y próximos pasos", "Criterio y autonomía", "Receptividad", "Curiosidad", "Iniciativa"]);
 
     const evidencias = await page.locator(".crit .ev").allTextContents();
-    assert.equal(evidencias.length, 6, "cada criterio tiene que mostrar evidencia");
+    assert.equal(evidencias.length, 7, "cada criterio tiene que mostrar evidencia");
     assert.match(evidencias[0], /Entiendo, contame desde cuándo pasa/);
 
     const aviso = await page.locator(".disclaimer").textContent();
@@ -155,7 +156,7 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
     await page.locator('.nav button:has-text("Escenarios")').click();
     await esperarVista("Escenarios de simulación");
     await page.locator(".acc-h").first().click();
-    await page.locator(".acc-b input").first().fill("Recordatorios duplicados (editado)");
+    await page.locator(".acc-b input").first().fill("Un compañero bloquea tu ticket (editado)");
     await page.locator("#saveCfg").click();
     await page.waitForFunction(() => /Configuración guardada/.test(document.getElementById("toast").textContent), null, { timeout: 10000 });
 
@@ -166,7 +167,7 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
     await page.waitForFunction(() => /Configuración guardada/.test(document.getElementById("toast").textContent), null, { timeout: 10000 });
 
     const { cuerpo } = await pedir(app.base, "/api/empresa");
-    assert.equal(cuerpo.escenarios[0].titulo, "Recordatorios duplicados (editado)");
+    assert.equal(cuerpo.escenarios[0].titulo, "Un compañero bloquea tu ticket (editado)");
     assert.equal(cuerpo.criterios[0].peso, 1);
   });
 
@@ -203,10 +204,10 @@ describe("recorrido completo en el navegador", { skip: saltear }, () => {
     if (await page.locator(".typebar").isHidden()) await page.locator('button[aria-label="Escribir en vez de hablar"]').click();
     const campo = page.locator('.typebar input[aria-label="Tu respuesta"]');
     // Hacen falta al menos dos respuestas del candidato para que se arme el informe.
-    await campo.fill("Entiendo, Laura. ¿Pasa con WhatsApp o también con email?");
+    await campo.fill("Entiendo, Agustina. ¿Pasa con WhatsApp o también con email?");
     await campo.press("Enter");
     await page.waitForFunction(() => document.querySelectorAll(".transcript .ln.u").length >= 1, null, { timeout: 15000 });
-    await campo.fill("Te aviso hoy a las tres, Laura. DECI:Perfecto, quedo a la espera. Gracias, hasta luego. [FIN]");
+    await campo.fill("Te aviso hoy a las tres, Agustina. DECI:Perfecto, quedo a la espera. Gracias, hasta luego. [FIN]");
     await campo.press("Enter");
     // Al detectar [FIN] cuelga solo y arranca la evaluación.
     await esperarVista("Informe");

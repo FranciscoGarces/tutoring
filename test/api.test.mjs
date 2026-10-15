@@ -78,7 +78,7 @@ describe("servidor con Gemini", () => {
 
     const uno = await pedir(app.base, `/api/informes/${id}`);
     assert.equal(uno.status, 200);
-    assert.equal(uno.cuerpo.evaluacion.criterios.length, 6);
+    assert.equal(uno.cuerpo.evaluacion.criterios.length, 7);
 
     assert.equal((await pedir(app.base, `/api/informes/${id}`, { method: "DELETE" })).status, 200);
     assert.equal((await pedir(app.base, `/api/informes/${id}`)).status, 404);
@@ -295,7 +295,7 @@ describe("servidor con Claude (anthropic)", () => {
     });
     assert.equal(r.status, 200);
     const ev = JSON.parse(r.texto);
-    assert.equal(ev.criterios.length, 6);
+    assert.equal(ev.criterios.length, 7);
     assert.ok(!/clave-de-prueba/.test(r.bruto));
   });
 
