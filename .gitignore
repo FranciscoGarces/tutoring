@@ -3,3 +3,6 @@ node_modules/
 data/empresa.json
 data/informes/*.json
 .playwright-mcp/
+
+# Config local de Claude Code (permisos de esta máquina)
+.claude/settings.local.json
