@@ -269,9 +269,6 @@
     if (e.glosario && e.glosario.length) col.append(h("div", { class: "info" },
       h("div", null, h("div", { class: "eyebrow", text: "Palabras que vas a escuchar" }),
         h("ul", { class: "tips" }, ...e.glosario.map(g => h("li", null, h("b", { text: g.termino + ": " }), g.significa))))));
-    if (S.cfg.criterios && S.cfg.criterios.length) col.append(h("div", { class: "info" },
-      h("div", null, h("div", { class: "eyebrow", text: "Cómo te van a mirar" }),
-        h("ul", { class: "tips" }, ...S.cfg.criterios.map(c => h("li", null, h("b", { text: c.nombre + ": " }), c.descripcion))))));
     col.append(h("ul", { class: "tips" },
       h("li", { text: "Hablá con naturalidad. Cuando hacés una pausa, el cliente responde." }),
       h("li", { text: "Si el cliente está hablando, tocá la esfera para interrumpirlo." }),
