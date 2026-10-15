@@ -10,22 +10,31 @@ window.T = window.T || {};
 
   // ---------------------------------------------------------------- Nodo Software
   const nodo = {
-    version: 2,
+    version: 3,
     empresa: "Nodo Software",
     rubro: "Software",
-    responsable: { nombre: "Martín Sosa", rol: "Líder técnico" },
+    responsable: { nombre: "Cecilia Arce", rol: "Dirección general" },
 
     contextos: [
-      g("proposito", `Nodo Software es una software factory de San Miguel (18 personas).
-Nuestro producto principal es TurnoFácil. Ayudamos a consultorios y peluquerías a llenar su agenda y reducir las ausencias: cada turno perdido es plata que pierde el cliente.`),
-      g("oferta", `TurnoFácil: sistema web de turnos. Unos 300 clientes, casi todos PyMEs (consultorios, odontólogos, peluquerías, barberías).
-Los pacientes reservan online y reciben un recordatorio por WhatsApp o email 24 h antes.
-Los recordatorios bajaron las ausencias un 30%: son la función que más valoran los clientes.`),
+      g("proposito", `Nodo Software es una software factory de San Miguel con 18 personas. Fue fundada hace seis años por Martín Sosa y Cecilia Arce, que empezaron haciendo sistemas de turnos para un consultorio de su familia.
+Nuestro producto principal es TurnoFácil: un sistema web de turnos para consultorios, peluquerías, barberías y otros negocios de servicios. Tiene unos 300 clientes, casi todos PyMEs de uno a cinco empleados. Cada turno perdido es plata que pierde el cliente final.`),
+      g("oferta", `TurnoFácil: reservas online desde un enlace del negocio (Instagram, Google o WhatsApp); recordatorios 24 horas antes por WhatsApp o email, donde el paciente responde 1 para confirmar o 2 para cancelar (bajaron las ausencias un 30 % en promedio); agenda diaria y semanal con bloqueos; señas opcionales cobradas con Mercado Pago; multisucursal en el plan Clínica.
+Planes (precios de ejemplo, se actualizan por inflación): Básico, para un profesional y un local, $ 45.000 por mes; Pro, hasta cinco profesionales, con WhatsApp y señas, $ 89.000 por mes; Clínica, varias sucursales, a convenir.
+Prueba gratis de 30 días, sin tarjeta. Se puede cambiar de plan en cualquier momento; el cambio se aplica al mes siguiente. Los aumentos se avisan con 30 días de anticipación, por email y en el panel.`),
       g("trabajo", `Scrum con sprints de 2 semanas. Daily 9:30 (15 min). Tablero en Jira, proyecto TF.
 Ramas: feature/TF-123 desde develop. Hotfix solo para prioridad 1.
 Definición de terminado: test del caso + review de un senior + probado en staging.
 Deploys a producción martes y jueves a las 18 h.
-Commits y PRs en español.`),
+Commits y PRs en español.
+
+Equipo (solo para el mentor y la evaluación, no para el cliente):
+Martín Sosa, líder técnico: arquitectura y prioridades técnicas.
+Cecilia Arce, dirección general: decisiones de negocio, precios y clientes grandes.
+Ignacio Duarte, product owner: prioridades de cada sprint y alcance de los pedidos de clientes.
+Ramiro Ibarra, senior de pagos: todo lo que toca Mercado Pago. Único que toca api/pagos.
+Agustina Ferrari, soporte de primer nivel.
+Tomás Quiroga, dev senior de backend: recordatorios, jobs e integración con WhatsApp.
+Julieta Peña, dev frontend: panel del negocio y página de reservas.`),
       g("problemas", `1. Entender el impacto: a cuántos clientes afecta y desde cuándo.
 2. Reproducirlo antes de arreglarlo.
 3. Buscar la causa, no parchear el síntoma.
@@ -34,15 +43,18 @@ Commits y PRs en español.`),
 6. PR con: qué cambia, por qué y cómo lo probaste.`),
       g("clientes", `Sin tecnicismos. Primero escuchar y entender, después proponer.
 No prometer fechas sin estimar con el equipo: "lo reviso y te aviso a las 15" es mejor que una promesa.
-Avisar antes de que el cliente pregunte.`),
+Avisar antes de que el cliente pregunte. Nunca culpar a un compañero ni a otro proveedor delante del cliente: se dice "estamos revisando".
+Reconocer el impacto: si un paciente canceló por el error, eso es lo primero que se nombra.
+Quién decide qué: soporte resuelve el uso del sistema; pagos, señas y devoluciones van a Ramiro (confirmar recepción en 2 horas hábiles, resolver en 48); cambios de precio o descuentos los autoriza Cecilia; las migraciones grandes se estiman con un senior antes de dar fecha.`),
       g("calidad", `- ¿Resuelve la causa o solo el síntoma?
 - Casos borde: datos vacíos, fechas, zonas horarias (los negocios están en distintas provincias).
 - ¿Puede correr dos veces en paralelo sin romper nada?
 - Tiene test del caso que falló.
 - No rompe otros módulos que usan la misma función.
 - Descripción del PR clara: qué, por qué y cómo se probó.`),
-      g("restricciones", `api/pagos: solo con un senior.
-No se accede a datos reales de pacientes fuera de producción.`),
+      g("restricciones", `api/pagos: solo con un senior (Ramiro).
+No se accede a datos reales de pacientes fuera de producción.
+Antes de modificar jobs/recordatorios.js, tener en cuenta que el worker corre en dos réplicas.`),
       p("p-arquitectura", "Arquitectura y módulos", `api/ (Node.js + Express): turnos, clientes, negocios, pagos. Base PostgreSQL.
 web/ (React): panel del negocio y página de reservas.
 jobs/recordatorios.js: corre cada 15 minutos y envía los recordatorios. Existe porque los recordatorios son lo que reduce las ausencias.
@@ -91,6 +103,17 @@ function armarMensaje(turno) {
 }
 
 module.exports = { enviarRecordatorios };`
+      },
+      {
+        nombre: "playbook-soporte",
+        contenido: `Incidentes típicos y cómo se resuelven (uso interno del mentor y de la evaluación).
+
+1. Recordatorios duplicados (clínica). Síntoma: pacientes reciben dos mensajes por WhatsApp. Causa típica: el job corre en dos réplicas y el marcado de enviado llega tarde. Qué hacer: no prometer fecha; confirmar impacto (cuántos pacientes, desde cuándo); dev reproduce en staging; avisar cuando hay fix. Qué no hacer: tocar api/pagos ni desactivar recordatorios sin avisar.
+2. Turno que no aparece (peluquería). Causa típica: zona horaria mal configurada o turno cargado en otra sucursal. Qué hacer: pedir captura del mail de confirmación y el enlace de reserva; revisar en el panel si el turno existe y en qué sucursal.
+3. Pago aprobado, turno sin confirmar (estética). Causa típica: el aviso de Mercado Pago llegó tarde o se perdió. Qué hacer: escalar a Ramiro con el número de operación; no prometer plazo hasta que Ramiro confirme; decir que el dinero no se pierde y que se avisa en 48 horas hábiles.
+4. Baja por aumento de precio (barbería). Qué hacer: escuchar el motivo; reconocer si el aviso llegó con poca anticipación; mostrar el plan Básico como alternativa; descuentos solo si Cecilia los autorizó.
+5. Migración de clientes desde una planilla (peluquería). Qué hacer: pedir una planilla de muestra; normalizar teléfonos sin código de área; unificar clientes repetidos por teléfono; estimar con un dev senior antes de dar fecha.
+6. Respuestas de WhatsApp no registradas. Causa típica: el mensaje llegó fuera de la ventana de 24 horas o con texto extra ("1 gracias"). Qué hacer: explicar al negocio que el paciente puede llamar para confirmar; registrar el caso para revisar el parser.`
       }
     ],
 
@@ -103,54 +126,97 @@ module.exports = { enviarRecordatorios };`
     },
 
     escenarios: [
-      {
-        id: "duplicados",
-        titulo: "Recordatorios duplicados",
-        resumen: "Una clínica llama molesta: sus pacientes reciben dos mensajes por turno.",
-        modalidad: "llamada",
-        cliente: "Laura Méndez, administrativa de Clínica Norte (San Miguel). Usa TurnoFácil hace dos años.",
-        personalidad: "Educada pero molesta y apurada: tiene la sala de espera llena. Si la escuchan, se calma. Si le hablan en difícil o la apuran, se enoja más.",
-        situacion: "Desde hace unas dos semanas, varios pacientes reciben el recordatorio del turno dos veces. Ayer un paciente se quejó en la recepción y otro canceló pensando que era spam.\nDatos que solo da si le preguntan: pasa con WhatsApp, no con email; no les pasa a todos, más o menos a 1 de cada 5; la clínica tiene unos 40 turnos por día; ya lo había comentado por mail y nadie le respondió.",
-        objetivo: "Entender el problema, contener a la clienta, no prometer lo que no sabés y acordar próximos pasos claros.",
-        duracion: 5,
-        dificultad: "Media"
-      },
-      {
-        id: "urgente",
-        titulo: "Pedido urgente sin detalles",
-        resumen: "El dueño de una barbería quiere \"algo para cobrar seña\" para mañana.",
-        modalidad: "llamada",
-        cliente: "Diego Paz, dueño de Barbería Paz (Bella Vista).",
-        personalidad: "Acelerado y entusiasta. Habla rápido, no sabe de tecnología y cambia de idea sobre la marcha.",
-        situacion: "Quiere que sus clientes paguen una seña al reservar porque los sábados tiene muchas ausencias. Lo quiere \"para mañana\".\nDatos que solo da si le preguntan: los sábados falta un 30% de los clientes; quiere una seña del 20%; ya cobra con Mercado Pago en el local; si alguien cancela con 24 h de anticipación, quiere devolverle la seña.",
-        objetivo: "Hacer preguntas para entender la necesidad real, manejar el apuro sin prometer fechas y resumir lo acordado.",
-        duracion: 5,
-        dificultad: "Media"
-      },
-      {
-        id: "demora",
-        titulo: "Comunicar una demora",
-        resumen: "Tenés que avisarle a una clienta que la función que pidió se atrasa una semana.",
-        modalidad: "llamada",
-        cliente: "Marta Ríos, dueña del Consultorio Odontológico Ríos (Muñiz).",
-        personalidad: "Tranquila pero firme. Le molesta quedar mal con sus pacientes.",
-        situacion: "El estudiante la llama para avisarle que la reserva online con pago se atrasa una semana por un problema en la integración de pagos. Ella ya les anunció a sus pacientes que desde el viernes podían reservar online.\nDatos que solo da si le preguntan: aceptaría una solución parcial (reservas online sin pago); necesita un texto para avisarles a sus pacientes; lo que más le importa es no quedar mal.",
-        objetivo: "Dar la mala noticia con claridad y empatía, hacerte cargo y proponer alternativas concretas.",
-        duracion: 5,
-        dificultad: "Alta"
-      }
+          {
+                "id": "bloqueo-compañero",
+                "titulo": "Un compañero bloquea tu ticket",
+                "resumen": "Estás en el daily del equipo de Nodo Software. Tu ticket de recordatorios depende de una revisión de Tomás Quiroga, dev senior de backend, que lleva dos días sin responder. El sprint cierra el viernes y necesitás destrabarlo hoy.",
+                "modalidad": "llamada",
+                "cliente": "Tomás Quiroga, dev senior de backend de Nodo. Muy bueno y muy ocupado.",
+                "personalidad": "Cortante y con prisa. No es hostil, pero se cierra si lo presionan. Responde mejor a pedidos concretos.",
+                "situacion": "Te acercás a su escritorio durante el daily para pedirle la revisión del PR de recordatorios. A mitad de la charla te dice que ya arregló el problema en otra rama, pero no lo comunicó. Solo si preguntan: El PR tiene 240 líneas; Julieta podría revisar pero no conoce el módulo; tiene reunión con Martín a las 11.",
+                "objetivo": "Desbloquear el ticket sin escalar ni culpar, acordar una revisión concreta y coordinar con quien ya tiene el cambio.",
+                "cierre": "Se resuelve cuando acuerdan quién revisa el PR y en qué plazo, o cuando el candidato propone algo concreto que Tomás puede aceptar. Si el candidato solo pide disculpas o insiste sin proponer nada, Tomás corta con un 'dale, después lo vemos'.",
+                "duracion": 8,
+                "dificultad": "Media"
+          },
+          {
+                "id": "alcance-sprint",
+                "titulo": "Te piden meter tres features antes del cierre",
+                "resumen": "Ignacio Duarte, product owner de Nodo, te pide una reunión de planificación. Quiere sumar tres pedidos de clientes al sprint que cierra en dos días. Tenés que responderle qué entra, qué no y por qué.",
+                "modalidad": "llamada",
+                "cliente": "Ignacio Duarte, product owner de Nodo. Tiene presión de dirección y de clientes.",
+                "personalidad": "Entusiasta y rápido. Cree que todo es un cambio chico. Cambia de opinión si ve datos.",
+                "situacion": "Pide sumar exportación a Excel de la agenda, recordatorio por SMS y zona horaria por sucursal. A los 5 minutos te cuenta que uno de los clientes que lo pidió canceló ayer, pero dirección igual quiere el cambio. Solo si preguntan: El equipo tiene 30 horas disponibles; el sprint ya tiene cuatro tickets comprometidos; la zona horaria toca el módulo de recordatorios.",
+                "objetivo": "Negociar el alcance con datos: explicar qué entra, qué no y por qué, sin decir que sí a todo ni cerrar con un no vacío.",
+                "cierre": "Se resuelve cuando acuerdan qué entra, qué queda para el siguiente sprint y qué hace falta para decidir lo demás. Si el candidato acepta todo sin análisis, Ignacio lo toma como bien pero pide confirmación por escrito. Si rechaza todo sin alternativas, insiste y la conversación queda abierta.",
+                "duracion": 10,
+                "dificultad": "Alta"
+          },
+          {
+                "id": "incidente-viernes",
+                "titulo": "Viernes 19:30: los recordatorios no salieron",
+                "resumen": "Es viernes a la noche y sos el responsable de guardia. Agustina Ferrari, de soporte, te llama porque varios pacientes de clientes de TurnoFácil no recibieron el recordatorio de los turnos de mañana. Tenés que atender la llamada y decidir qué hacer.",
+                "modalidad": "llamada",
+                "cliente": "Agustina Ferrari, soporte de Nodo. Preocupada pero no entra en pánico; necesita saber qué hacer.",
+                "personalidad": "Ansiosa al principio. Se calma si ve un plan. Hace varias preguntas seguidas.",
+                "situacion": "Llama al responsable de guardia por un problema con los recordatorios de la noche. A los 4 minutos aparece que hubo un deploy a las 18 h que tocó el worker, y Martín no atiende el teléfono. Solo si preguntan: El worker corre en dos réplicas; hay turnos el sábado a la mañana; el rollback está documentado pero nadie lo probó.",
+                "objetivo": "Triagear el incidente, decidir un primer paso reversible, avisar a quien corresponde y dejar un registro. No improvisar un arreglo en producción.",
+                "cierre": "Se resuelve cuando hay un primer paso concreto (quién hace qué, en cuánto tiempo y cómo se avisa a los clientes afectados). Si el candidato promete arreglar todo sin revisar el impacto, Agustina lo marca y pide una reunión con Martín; la llamada termina con un plan incompleto.",
+                "duracion": 10,
+                "dificultad": "Alta"
+          },
+          {
+                "id": "feedback-pr",
+                "titulo": "Feedback a una compañera sobre su PR",
+                "resumen": "Tenés una reunión 1:1 con Julieta Peña, dev frontend de Nodo. Revisaste su PR del panel del negocio y tenés comentarios para darle. Es una conversación de equipo, no una evaluación de desempeño.",
+                "modalidad": "llamada",
+                "cliente": "Julieta Peña, dev frontend de Nodo. Buena y sensible a las críticas, sobre todo si la sienten pública.",
+                "personalidad": "Cordial al principio. Se pone a la defensiva si siente que la juzgan. Cede si le explican el porqué con ejemplos.",
+                "situacion": "Tenés que hablar de un bug de zona horaria (la fecha se muestra en UTC), dos componentes sin etiquetas para lectores de pantalla y una variable con nombre confuso. A mitad de la revisión te cuenta que Martín le pidió el PR con apuro y que ella ya lo había avisado. Solo si preguntan: El bug apareció en un negocio de Ushuaia; la accesibilidad es requisito de la página de reservas.",
+                "objetivo": "Dar feedback específico y constructivo, separar lo urgente de lo opcional, escuchar la justificación y acordar qué cambia y cuándo.",
+                "cierre": "Se resuelve cuando Julieta entiende los problemas y acuerdan cuáles son obligatorios y para cuándo. Si el candidato critica a la persona en vez del código, Julieta se cierra y la conversación termina sin acuerdos.",
+                "duracion": 10,
+                "dificultad": "Media"
+          },
+          {
+                "id": "estimacion-direccion",
+                "titulo": "La directora pide una estimación",
+                "resumen": "Cecilia Arce, directora de Nodo, te llama en medio de otra reunión. Quiere saber si se puede migrar la base de pacientes de Clínica Norte antes de fin de mes. Todavía no tenés todos los datos.",
+                "modalidad": "llamada",
+                "cliente": "Cecilia Arce, directora de Nodo. Va directo al punto y no le gustan los rodeos.",
+                "personalidad": "Impaciente, exigente y justa. Si detecta una respuesta inflada o vaga, la pide de nuevo.",
+                "situacion": "Te llama para pedir una estimación de la migración de Clínica Norte. A los 5 minutos te dice que el cliente agregó dos sucursales más y quiere saber el costo. Solo si preguntan: La planilla tiene cuatro formatos de teléfono; hay unos 300 duplicados aproximados; nadie hizo una migración de este tamaño antes.",
+                "objetivo": "Responder con una estimación con rango y nivel de confianza, explicar supuestos y riesgos, y decir qué información falta y cuándo se consigue.",
+                "cierre": "Se resuelve cuando tiene un rango con supuestos y lo que falta. Si el candidato da una fecha sin rango, Cecilia la pide de nuevo; si cede a todo sin análisis, lo dice y corta.",
+                "duracion": 8,
+                "dificultad": "Alta"
+          },
+          {
+                "id": "integracion-imposible",
+                "titulo": "La clínica pide una integración imposible",
+                "resumen": "Ariel Montenegro, director médico de Clínica Norte y cliente de TurnoFácil desde hace dos años, te llama. Quiere conectar el sistema con su software de historias clínicas y dice que está evaluando otros proveedores.",
+                "modalidad": "llamada",
+                "cliente": "Dr. Ariel Montenegro, director médico de Clínica Norte. Formal, poco tiempo y con un proveedor anterior que lo defraudó.",
+                "personalidad": "Formal y con tono de autoridad. Respeta a quien admite lo que no sabe y desconfía de quien promete todo.",
+                "situacion": "Te llama para plantear la integración con su software de historias clínicas, que no tiene API pública. A los 5 minutos menciona que otro proveedor ya le contestó que sí a la integración. Solo si preguntan: Manejan datos de salud (sensibles); el contrato actual vence en 60 días; el otro proveedor no sabe qué datos se van a intercambiar.",
+                "objetivo": "Mantener la relación sin prometer lo que no se puede, explicar qué sí es posible, derivar a dirección y proponer un próximo paso con fecha.",
+                "cierre": "Se resuelve cuando hay un próximo paso concreto (reunión con dirección y fecha de respuesta). Si el candidato promete la integración, pide confirmación por escrito. Si dice que no sin ofrecer nada, el doctor termina la llamada anunciando el cambio de proveedor.",
+                "duracion": 10,
+                "dificultad": "Alta"
+          }
     ],
 
     criterios: [
-      { nombre: "Escucha activa", descripcion: "Deja hablar al cliente, retoma lo que dijo y no interrumpe.", peso: 3 },
-      { nombre: "Preguntas para entender", descripcion: "Hace preguntas concretas antes de proponer: qué pasa, desde cuándo, a quién afecta.", peso: 3 },
-      { nombre: "Claridad", descripcion: "Se expresa en frases simples, ordenadas y sin tecnicismos.", peso: 2 },
-      { nombre: "Empatía", descripcion: "Reconoce el malestar del cliente y lo contiene sin ponerse a la defensiva.", peso: 2 },
-      { nombre: "Manejo de expectativas", descripcion: "No promete fechas ni soluciones que no puede garantizar.", peso: 3 },
-      { nombre: "Cierre y próximos pasos", descripcion: "Resume lo acordado y deja claro qué va a pasar y cuándo avisa.", peso: 2 }
+      { nombre: "Escucha y claridad", descripcion: "Deja hablar, retoma lo que dijo el otro sin pedir que lo repita y se expresa en frases simples y ordenadas.", peso: 15 },
+      { nombre: "Empatía y contención", descripcion: "Reconoce el malestar o la presión del otro y lo contiene sin ponerse a la defensiva ni culpar a nadie.", peso: 10 },
+      { nombre: "Cierre y próximos pasos", descripcion: "Resume lo acordado, dice qué va a pasar, quién lo hace y cuándo vuelve a comunicarse.", peso: 10 },
+      { nombre: "Criterio y autonomía", descripcion: "Averigua antes de prometer, resuelve lo que le corresponde y deriva lo que no. No promete fechas ni soluciones que no puede garantizar.", peso: 20 },
+      { nombre: "Receptividad", descripcion: "Incorpora lo que dice el cliente, el compañero o el equipo, y ajusta su propuesta cuando recibe información nueva.", peso: 10 },
+      { nombre: "Curiosidad", descripcion: "Pregunta para entender lo que no sabe: desde cuándo, a quién afecta, qué se intentó antes. No da por sentado lo que no se dijo.", peso: 20 },
+      { nombre: "Iniciativa", descripcion: "Propone alternativas o próximos pasos sin que se lo pidan y se ofrece a hacer algo concreto dentro de lo que le corresponde.", peso: 15 }
     ],
 
-    notasEvaluacion: "Valoramos más la honestidad que la velocidad. Un \"no sé, lo averiguo y te aviso a las 15\" vale más que una promesa sin fundamento."
+    notasEvaluacion: "Valorá la confiabilidad (cumple lo que promete), el pensamiento crítico (distingue lo que sabe de lo que supone), la curiosidad (pregunta lo que no sabe) y la receptividad (incorpora lo que dice el otro). Preferimos un 'lo consulto y te confirmo' antes que una respuesta rápida inventada. Con datos de pacientes y pagos no hay margen de error."
   };
 
   // ---------------------------------------------------------------- La Esquina (bodegón)
