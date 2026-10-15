@@ -119,8 +119,14 @@ CÓMO EVALUAR
 - Evaluá SOLO a ${candidato}, y solo con lo que efectivamente dijo en esta transcripción. No supongas intenciones ni le atribuyas cosas que no dijo.
 - La transcripción viene de un reconocedor de voz: no penalices errores de transcripción, de gramática, muletillas ni palabras cortadas. Evaluá el contenido y la intención, no la prolijidad del texto.
 - Cada criterio lleva como evidencia una CITA TEXTUAL de ${candidato}, copiada literal de la transcripción (podés recortarla, pero no reescribirla). Nunca inventes citas ni cites al CLIENTE.
-- Si para un criterio no hay nada que citar, poné exactamente "Sin evidencia en la conversación" y el puntaje que corresponda por esa ausencia, sin castigar de más: una conversación corta da menos oportunidades de demostrar cosas.
-- Puntajes enteros de 1 a 5: 1 = no lo demostró, 2 = apenas, 3 = aceptable, 4 = bien, 5 = sobresaliente. Usá todo el rango; no pongas todo 3 ni todo 5.
+- Si para un criterio no hay nada que citar, poné puntaje null y evidencia exactamente "Sin evidencia en la conversación". Eso significa "no se pudo evaluar", no "mal": no lo cuentes como un puntaje bajo.
+- Puntajes enteros de 1 a 5, usando la DESCRIPCIÓN de cada criterio como vara:
+  1 = hace lo contrario de lo que pide el criterio (por ejemplo, promete sin preguntar o corta al cliente).
+  2 = lo intenta, pero con errores que cambian el resultado.
+  3 = cumple lo que dice la descripción del criterio. Es el puntaje de quien lo hace bien, sin errores graves: no lo bajes por no ser brillante.
+  4 = lo hace con detalle y en el momento justo, y se nota.
+  5 = lo sostiene durante toda la conversación y el cliente lo nota.
+  Si el candidato cumple la descripción de un criterio, el puntaje es 3 como mínimo. No pongas todo 3 ni todo 5.
 - Sé justo, concreto y útil: cada punto a mejorar tiene que decir qué hacer distinto la próxima vez. Nada de elogios vacíos.
 - Es una práctica de un estudiante, no un examen de ingreso: señalá lo que falta sin dureza innecesaria.
 - No recomiendes contratar ni descartar, no compares con otros candidatos y no hables de "apto" o "no apto": la decisión la toma una persona.
@@ -131,7 +137,7 @@ Respondé SOLO con un objeto JSON, sin texto antes ni después y sin bloques de 
 El arreglo "criterios" tiene que traer los ${(cfg.criterios || []).length} criterios, en el mismo orden y con el nombre escrito igual que en la lista: ${nombres}.
 {
   "resumen": "2 o 3 oraciones sobre cómo le fue",
-  "criterios": [ { "nombre": "igual al de la lista", "puntaje": 1, "evidencia": "cita textual de ${candidato}", "comentario": "1 oración que explica el puntaje" } ],
+  "criterios": [ { "nombre": "igual al de la lista", "puntaje": 1, "evidencia": "cita textual de ${candidato}", "comentario": "1 oración que explica el puntaje, citando la conducta observada" } ],
   "fortalezas": ["2 o 3 fortalezas concretas"],
   "a_mejorar": ["2 o 3 puntos a mejorar, cada uno con qué hacer distinto"],
   "como_encaro": ["3 a 5 pasos que describen cómo encaró el problema, en orden"],

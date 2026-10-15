@@ -118,7 +118,8 @@
       if (p == null) return;
       let peso = Number(c && c.peso);
       if (!Number.isFinite(peso) || peso <= 0) peso = 1;
-      num += p * peso; den += 5 * peso; cubiertos++;
+      // Escala 1-5 llevada a 0-100 % (1 = 0 %, 3 = 50 %, 5 = 100 %).
+      num += (p - 1) * peso; den += 4 * peso; cubiertos++;
     });
     return { puntaje: den ? Math.round((num / den) * 100) : null, cubiertos, total: defs.length };
   }

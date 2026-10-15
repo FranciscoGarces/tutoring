@@ -266,6 +266,12 @@
     col.append(h("div", null, h("div", { class: "eyebrow", text: `Simulación · ${e.duracion || 5} min` }), h("h1", { text: e.titulo }), h("p", { class: "lead", text: e.resumen })));
     col.append(h("div", { class: "info" },
       h("div", null, h("div", { class: "eyebrow", text: "Con quién hablás" }), h("p", { text: e.cliente }))));
+    if (e.glosario && e.glosario.length) col.append(h("div", { class: "info" },
+      h("div", null, h("div", { class: "eyebrow", text: "Palabras que vas a escuchar" }),
+        h("ul", { class: "tips" }, ...e.glosario.map(g => h("li", null, h("b", { text: g.termino + ": " }), g.significa))))));
+    if (S.cfg.criterios && S.cfg.criterios.length) col.append(h("div", { class: "info" },
+      h("div", null, h("div", { class: "eyebrow", text: "Cómo te van a mirar" }),
+        h("ul", { class: "tips" }, ...S.cfg.criterios.map(c => h("li", null, h("b", { text: c.nombre + ": " }), c.descripcion))))));
     col.append(h("ul", { class: "tips" },
       h("li", { text: "Hablá con naturalidad. Cuando hacés una pausa, el cliente responde." }),
       h("li", { text: "Si el cliente está hablando, tocá la esfera para interrumpirlo." }),
@@ -377,6 +383,7 @@
           if (ev.role === "assistant") { cap.classList.remove("pensando"); cap.textContent = ev.text; } else capU.textContent = "";
           break;
         case "error":
+          if (!ev.message) { note.hidden = true; break; }
           note.hidden = false; note.textContent = ev.message;
           // El motor de voz no pudo arrancar: ofrecemos seguir con el siguiente para no frenar la demo.
           if (ev.code === "voz_inicio" || ev.code === "vapi_inicio") {

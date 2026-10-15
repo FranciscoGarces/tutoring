@@ -936,6 +936,7 @@ registerProcessor("mic-pcm", MicPcm);`;
 
     function sesionLista() {
       clearTimeout(setupTimer);
+      if (reintentos) { console.info("[voz] reconectado", new Date().toLocaleTimeString("es-AR")); aviso(""); }
       reintentos = 0;
       if (conectado) { setState("listening"); return; }   // reconexión: la conversación sigue donde estaba
       conectado = true;
@@ -1003,6 +1004,8 @@ registerProcessor("mic-pcm", MicPcm);`;
       // Ya estábamos hablando: Google corta cada ~10 minutos o se cayó la red. Retomamos la sesión.
       if (handle && reintentos < 2) {
         reintentos++;
+        console.warn("[voz] se cortó la sesión, reconectando", reintentos, new Date().toLocaleTimeString("es-AR"));
+        aviso("Se cortó la conexión con la voz un momento. Reconectando…");
         cortarAudio(); generando = false;
         if (textoCliente) cerrarCliente();
         try { token = await pedirToken(); } catch (_) {}

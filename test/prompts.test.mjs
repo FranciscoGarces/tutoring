@@ -64,10 +64,12 @@ describe("prompt del mentor reordenado para el caché", () => {
     assert.ok(!/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(a));
   });
 
-  test("la evaluación no cambió", () => {
+  test("la evaluación tiene la vara por descripción y no castiga lo no dicho", () => {
     const cfg = empresas[0], esc = cfg.escenarios[0];
     const turnos = [{ role: "assistant", text: "Hola" }, { role: "user", text: "Buen día" }];
-    assert.equal(nuevo.prompts.evaluacion(cfg, esc, turnos, "Ana", 3), antes.prompts.evaluacion(cfg, esc, turnos, "Ana", 3));
+    const p = nuevo.prompts.evaluacion(cfg, esc, turnos, "Ana", 3);
+    assert.ok(p.includes("3 = cumple lo que dice la descripción del criterio"));
+    assert.ok(p.includes("poné puntaje null"));
   });
 
   test("la voz tiene la regla de cierre nueva: duración estimada, cierre por resolución o cansancio y [FIN] al final", () => {

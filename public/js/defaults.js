@@ -220,6 +220,44 @@ module.exports = { enviarRecordatorios };`
   };
 
   // ---------------------------------------------------------------- La Esquina (bodegón)
+  // Palabras técnicas que aparecen en cada escenario, explicadas en una línea para el briefing.
+  const GLOSARIO = {
+    "bloqueo-compañero": [
+      { termino: "Daily", significa: "reunión corta de pie, de 15 minutos, en la que cada uno cuenta qué hizo, qué hará y qué lo traba." },
+      { termino: "Ticket", significa: "tarea registrada en el tablero del equipo, con su descripción y su responsable." },
+      { termino: "Revisión (PR)", significa: "un compañero lee tu cambio de código antes de sumarlo al proyecto." },
+      { termino: "Sprint", significa: "el período de trabajo (acá, dos semanas) con lo que el equipo se comprometió a entregar." }
+    ],
+    "alcance-sprint": [
+      { termino: "Sprint", significa: "el período de trabajo con lo que el equipo se comprometió a entregar." },
+      { termino: "Product owner", significa: "la persona que decide qué se construye primero." },
+      { termino: "Feature", significa: "una funcionalidad nueva que ve el usuario." },
+      { termino: "Backlog", significa: "la lista de pedidos pendientes, ordenada por prioridad." }
+    ],
+    "incidente-viernes": [
+      { termino: "Guardia", significa: "la persona que atiende los problemas urgentes fuera del horario de trabajo." },
+      { termino: "Deploy", significa: "subir a producción una versión nueva del sistema." },
+      { termino: "Worker", significa: "programa que corre solo, sin pantalla (acá, el que manda los recordatorios)." },
+      { termino: "Rollback", significa: "volver a la versión anterior, la que funcionaba." }
+    ],
+    "feedback-pr": [
+      { termino: "PR (pull request)", significa: "propuesta de cambio de código que otro revisa antes de sumarla." },
+      { termino: "Merge", significa: "aprobar y sumar el cambio al código principal." },
+      { termino: "Feedback", significa: "devolución sobre cómo hizo algo, para que lo mejore." }
+    ],
+    "estimacion-direccion": [
+      { termino: "Estimación", significa: "cuánto tiempo calculás que lleva algo, dando un rango." },
+      { termino: "Deuda técnica", significa: "partes del código que quedaron mal hechas y hacen más lento el trabajo." },
+      { termino: "Sprint", significa: "el período de trabajo con lo que el equipo se comprometió a entregar." }
+    ],
+    "integracion-imposible": [
+      { termino: "Integración", significa: "conectar nuestro sistema con el software de otra empresa." },
+      { termino: "API", significa: "la forma en que dos sistemas se hablan entre sí." },
+      { termino: "Sandbox", significa: "un entorno de prueba separado de los datos reales." }
+    ]
+  };
+  nodo.escenarios.forEach(e => { e.glosario = GLOSARIO[e.id] || []; });
+
   const esquina = {
     version: 2,
     empresa: "La Esquina",
