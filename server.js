@@ -827,7 +827,8 @@ async function intentar(id, purpose, payload, sse, signal) {
     if (!chars) throw provError(502, `${prov.name} devolvió una respuesta vacía.`, "empty");
     if (purpose === "eval") {
       const ev = core.parseEvaluacion(evaluacionTexto);
-      if (!ev || !ev.criterios.length || ev.criterios.some(c => !c.nombre || c.puntaje == null)) {
+      // Un criterio sin evidencia puede venir sin puntaje (null): no es un error. Solo falla si no hay ninguno puntuado.
+      if (!ev || !ev.criterios.length || ev.criterios.some(c => !c.nombre) || !ev.criterios.some(c => c.puntaje != null)) {
         throw provError(502, "La IA devolvió una evaluación incompleta o con formato inválido. Probá reintentar.", "eval_formato");
       }
       sse.open();
