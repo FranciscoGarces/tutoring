@@ -589,6 +589,7 @@
       list.append(h("div", { class: "crit" },
         h("div", { class: "nm" }, c.nombre, h("small", { text: `peso ${c.peso}` })), bars,
         x.comentario ? h("p", { class: "cm", text: x.comentario }) : null,
+        x.paraSubir ? h("p", { class: "cm", text: "Para subir: " + x.paraSubir }) : null,
         h("p", { class: "ev", text: x.evidencia ? `“${String(x.evidencia).replace(/^["“]+|["”]+$/g, "")}”` : "Sin evidencia en la conversación." })));
     });
     col.append(h("div", null, h("div", { class: "eyebrow", text: "Criterios de la empresa", style: "margin-bottom:8px" }), list));

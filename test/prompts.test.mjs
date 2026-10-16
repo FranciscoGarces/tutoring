@@ -72,6 +72,16 @@ describe("prompt del mentor reordenado para el caché", () => {
     assert.ok(p.includes("poné puntaje null"));
   });
 
+  test("la evaluación muestra indicadores por criterio y pide evidencia antes del puntaje", () => {
+    const cfg = nuevo.DEFAULTS, esc = cfg.escenarios[0];
+    const turnos = [{ role: "assistant", text: "Hola" }, { role: "user", text: "Buen día" }];
+    const p = nuevo.prompts.evaluacion(cfg, esc, turnos, "Ana", 3);
+    assert.ok(p.includes("Cuenta como evidencia:"));
+    assert.ok(p.includes("No cuenta (o cuenta en contra):"));
+    assert.ok(p.includes("una promesa no es empatía"), "la empatía no se cuenta por tranquilizar o prometer");
+    assert.ok(p.indexOf('"observado"') < p.indexOf('"puntaje"'), "primero lo observado, después el puntaje");
+  });
+
   test("la voz tiene la regla de cierre nueva: duración estimada, cierre por resolución o cansancio y [FIN] al final", () => {
     const cfg = empresas[0], esc = { ...cfg.escenarios[0], duracion: 8 };
     const voz = nuevo.prompts.voz(cfg, esc, "Ana");

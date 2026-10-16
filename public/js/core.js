@@ -64,8 +64,10 @@
       criterios: crits.filter(Boolean).map(c => ({
         nombre: texto1(c.nombre || c.criterio || c.name),
         puntaje: puntajeCriterio(c.puntaje != null ? c.puntaje : c.score),
+        observado: texto1(c.observado),
         evidencia: texto1(c.evidencia || c.cita || c.evidence),
-        comentario: texto1(c.comentario || c.comment)
+        comentario: texto1(c.comentario || c.comment),
+        paraSubir: texto1(c.paraSubir || c.para_subir)
       })),
       expresion: texto1(raw.expresion)
     };

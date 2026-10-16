@@ -91,7 +91,12 @@ ${esc.cierre ? `- Cuándo se resuelve: ${esc.cierre}` : "- Se resuelve cuando te
 
   // ---------- Evaluación de la simulación ----------
   function evaluacion(cfg, esc, transcripcion, candidato, duracionMin) {
-    const criterios = (cfg.criterios || []).map((c, i) => `${i + 1}. ${c.nombre} (peso ${c.peso}): ${c.descripcion}`).join("\n");
+    const criterios = (cfg.criterios || []).map((c, i) => {
+      const ind = c.indicadores || {};
+      const cuenta = (ind.cuenta || []).length ? `\n   Cuenta como evidencia: ${ind.cuenta.join("; ")}.` : "";
+      const noCuenta = (ind.noCuenta || []).length ? `\n   No cuenta (o cuenta en contra): ${ind.noCuenta.join("; ")}.` : "";
+      return `${i + 1}. ${c.nombre} (peso ${c.peso}): ${c.descripcion}${cuenta}${noCuenta}`;
+    }).join("\n");
     const nombres = (cfg.criterios || []).map(c => `"${c.nombre}"`).join(", ");
     const texto = transcripcion.map(t => `${t.role === "user" ? candidato.toUpperCase() : "CLIENTE"}: ${t.text}`).join("\n");
     const tipo = enPersona(esc) ? "una conversación cara a cara con un cliente" : "una llamada con un cliente";
@@ -119,11 +124,15 @@ CÓMO EVALUAR
 - Evaluá SOLO a ${candidato}, y solo con lo que efectivamente dijo en esta transcripción. No supongas intenciones ni le atribuyas cosas que no dijo.
 - La transcripción viene de un reconocedor de voz: no penalices errores de transcripción, de gramática, muletillas ni palabras cortadas. Evaluá el contenido y la intención, no la prolijidad del texto.
 - Cada criterio lleva como evidencia una CITA TEXTUAL de ${candidato}, copiada literal de la transcripción (podés recortarla, pero no reescribirla). Nunca inventes citas ni cites al CLIENTE.
+- Calificá cada criterio por separado, mirando solo la evidencia de ese criterio. Un buen desempeño en otro criterio no sube este, y uno flojo tampoco lo baja.
+- Primero describí en "observado" qué hizo ${candidato} con ese criterio (una oración), y recién después puntuá. Si no podés describirlo con algo que dijo, no hay evidencia.
+- Las reacciones del CLIENTE sirven para entender el efecto de lo que dijo ${candidato}, nunca como evidencia de lo que hizo.
+- Empatía: tranquilizar, prometer o decir "quedate tranquilo" no cuenta por sí solo. Cuenta si reconoce lo que siente o necesita el otro y eso se refleja en lo que propone o pregunta después.
 - Si para un criterio no hay nada que citar, poné puntaje null y evidencia exactamente "Sin evidencia en la conversación". Eso significa "no se pudo evaluar", no "mal": no lo cuentes como un puntaje bajo.
 - Puntajes enteros de 1 a 5, usando la DESCRIPCIÓN de cada criterio como vara:
   1 = hace lo contrario de lo que pide el criterio (por ejemplo, promete sin preguntar o corta al cliente).
   2 = lo intenta, pero con errores que cambian el resultado.
-  3 = cumple lo que dice la descripción del criterio. Es el puntaje de quien lo hace bien, sin errores graves: no lo bajes por no ser brillante.
+  3 = cumple lo que dice la descripción del criterio y sus indicadores. Es el puntaje de quien lo hace bien, sin errores graves: no lo bajes por no ser brillante.
   4 = lo hace con detalle y en el momento justo, y se nota.
   5 = lo sostiene durante toda la conversación y el cliente lo nota.
   Si el candidato cumple la descripción de un criterio, el puntaje es 3 como mínimo. No pongas todo 3 ni todo 5.
@@ -137,7 +146,7 @@ Respondé SOLO con un objeto JSON, sin texto antes ni después y sin bloques de 
 El arreglo "criterios" tiene que traer los ${(cfg.criterios || []).length} criterios, en el mismo orden y con el nombre escrito igual que en la lista: ${nombres}.
 {
   "resumen": "2 o 3 oraciones sobre cómo le fue",
-  "criterios": [ { "nombre": "igual al de la lista", "puntaje": 1, "evidencia": "cita textual de ${candidato}", "comentario": "1 oración que explica el puntaje, citando la conducta observada" } ],
+  "criterios": [ { "nombre": "igual al de la lista", "observado": "qué hizo ${candidato}, en una oración", "evidencia": "cita textual de ${candidato}", "puntaje": 1, "comentario": "1 oración que explica el puntaje", "paraSubir": "qué le faltó para el siguiente nivel, o vacío si ya es 5" } ],
   "fortalezas": ["2 o 3 fortalezas concretas"],
   "a_mejorar": ["2 o 3 puntos a mejorar, cada uno con qué hacer distinto"],
   "como_encaro": ["3 a 5 pasos que describen cómo encaró el problema, en orden"],
