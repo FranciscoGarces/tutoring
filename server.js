@@ -737,7 +737,8 @@ function geminiMessage(status, msg, model) {
   }
   if (code === 401) return `La GEMINI_API_KEY del .env no es válida. Creá otra en https://aistudio.google.com/apikey y reiniciá el servidor.${detalle}`;
   if (code === 429) return `Se agotó la cuota gratuita de Gemini por ahora. Esperá un minuto y probá de nuevo.${detalle}`;
-  if (code === 503) return `Gemini está saturado en este momento.${detalle}`;
+  // El detalle de Google viene en inglés y no le sirve al usuario: no lo mostramos.
+  if (code === 503) return "Gemini está con mucha demanda en este momento. Esperá unos segundos y tocá Reintentar: la conversación no se pierde.";
   if (code === 404) return `El modelo "${model}" no está disponible para tu key. Cambiá GEMINI_MODEL (o el de voz/evaluación) en el .env por uno de la lista de AI Studio.${detalle}`;
   return (msg || "Error de la API de Gemini").slice(0, 300);
 }
@@ -884,7 +885,10 @@ async function responder(purpose, payload, res, signal) {
       ultimo = r.error;
       if (r.empezo) { sse.error(ultimo); return sse.close(); }   // ya se mostró texto: no mezclamos proveedores
       if (!esReintentable(ultimo) || intento === MAX_REINTENTOS) break;
-      const espera = Math.round(800 * Math.pow(3, intento) * (0.8 + Math.random() * 0.4));
+      // Cuando el proveedor está saturado, esperamos más: reintentar en 1 segundo no sirve.
+      const saturado = /saturad|overload|high demand|demanda|529|503/i.test(ultimo && ultimo.message || "");
+      const base = saturado ? 4000 : 800;
+      const espera = Math.round(base * Math.pow(3, intento) * (0.8 + Math.random() * 0.4));
       console.log(`  [IA] reintento ${intento + 1}/${MAX_REINTENTOS} con ${id} en ${(espera / 1000).toFixed(1)}s`);
       sse.open();
       sse.event({ type: "retry", attempt: intento + 1, provider: id, message: "Reintentando…" });
