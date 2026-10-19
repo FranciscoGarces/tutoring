@@ -786,6 +786,9 @@ registerProcessor("mic-pcm", MicPcm);`;
     this.history = [];
     let emit = () => {}, ended = false, state = "idle", muted = false, conectado = false;
     let ws = null, token = null, handle = null, reintentos = 0, setupTimer = null;
+    // Keys de Gemini Live: el servidor dice cuál usó (número, nunca la key) y cuántas hay.
+    // Si Google corta por cuota o rechazo, pedimos un token con la siguiente.
+    let keyIdx = null, keysTotal = 1, cambiosDeKey = 0, contextoRetomado = "";
     let system = "", primerTurno = "";
     let media = null, ctx = null, nodoMic = null, salida = null, analizador = null, raf = 0, nivelMic = 0, finDeAudioMandado = false;
     let fuentes = new Set(), cola = 0;          // audio del cliente ya programado para sonar
@@ -950,7 +953,11 @@ registerProcessor("mic-pcm", MicPcm);`;
       const instrucciones = system
         + "\n\nIMPORTANTE (esta llamada es solo por voz)\n"
         + "- No digas ni leas en voz alta marcas como [FIN]. Para cortar, cuando ya te despediste, llamá a la herramienta colgar.\n"
-        + "- Si te hablan encima, callate y escuchá; después seguí desde ahí.";
+        + "- Si te hablan encima, callate y escuchá; después seguí desde ahí.\n"
+        + "- Cuando pensás o dudás (\"mmmm...\", \"eeeh...\", \"a ver...\"), decilo despacio y hacé un silencio real de un segundo antes de seguir: que se escuche que estás pensando."
+        + (contextoRetomado
+          ? "\n\nLA LLAMADA SE CORTÓ Y SE RETOMÓ. Esto es lo que ya se habló (no te vuelvas a presentar ni repitas lo dicho; seguí desde ahí, como si nada):\n" + contextoRetomado
+          : "");
       const s = {
         model: "models/" + (gl.model || "gemini-3.8-live"),
         generationConfig: {
@@ -969,13 +976,20 @@ registerProcessor("mic-pcm", MicPcm);`;
       return { setup: s };
     }
 
-    async function pedirToken() {
-      const r = await fetch("/api/voz/token", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    // descartar: { idx, motivo } cuando la key que veníamos usando falló (cuota, rechazo).
+    async function pedirToken(descartar) {
+      const body = descartar ? JSON.stringify({ descartar: descartar.idx, motivo: String(descartar.motivo || "").slice(0, 160) }) : "{}";
+      const r = await fetch("/api/voz/token", { method: "POST", headers: { "content-type": "application/json" }, body });
       let j = null; try { j = await r.json(); } catch (_) {}
       if (!r.ok || !j || !j.token) throw new Error((j && j.error && (j.error.message || j.error)) || "El servidor no pudo generar el token de Gemini Live.");
       if (j.maxMinutos) maxMinutos = Number(j.maxMinutos) || maxMinutos;
+      keyIdx = Number.isInteger(j.keyIndex) ? j.keyIndex : null;
+      keysTotal = Number(j.keys) || 1;
       return j.token;
     }
+    // ¿El corte fue por la key (cuota, rechazo de Google)? Ahí sí sirve probar con otra cuenta.
+    const esProblemaDeKey = r => /quota|exceeded|exhausted|resource_exhausted|rate limit|429|api key|api_key|unauthenticated|permission|billing/i.test(String(r || ""));
+    const quedaOtraKey = () => keyIdx != null && keysTotal > 1 && cambiosDeKey < keysTotal - 1;
 
     function abrir() {
       const url = (gl.wsUrl || "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained")
@@ -1000,7 +1014,35 @@ registerProcessor("mic-pcm", MicPcm);`;
       if (ws !== yo || ended) return;
       ws = null;
       clearTimeout(setupTimer);
-      if (!conectado) return fallarInicio(code === 4000 ? "Gemini Live no respondió a tiempo. Revisá la conexión a internet." : mensajeErrorGemini(reason, gl.model));
+      if (!conectado) {
+        // No llegó a conectar por la key (cuota o rechazo): probamos con la key de respaldo antes de rendirnos.
+        if (code !== 4000 && esProblemaDeKey(reason) && quedaOtraKey()) {
+          cambiosDeKey++;
+          console.warn("[voz] la key de Gemini Live falló al conectar, pruebo con la de respaldo:", String(reason || "").slice(0, 120));
+          try { token = await pedirToken({ idx: keyIdx, motivo: reason }); }
+          catch (e) { return fallarInicio(e.message); }
+          if (ended) return;
+          abrir();
+          return;
+        }
+        return fallarInicio(code === 4000 ? "Gemini Live no respondió a tiempo. Revisá la conexión a internet." : mensajeErrorGemini(reason, gl.model));
+      }
+      // Se cortó a mitad de la llamada por la key: seguimos con otra cuenta. La sesión de Google no se puede
+      // retomar con otra key, así que abrimos una nueva y le pasamos lo que se habló hasta acá.
+      if (esProblemaDeKey(reason) && quedaOtraKey()) {
+        cambiosDeKey++;
+        console.warn("[voz] la key de Gemini Live se quedó sin cuota a mitad de la llamada, sigo con la de respaldo");
+        aviso("Se cortó la voz un momento. Reconectando…");
+        cortarAudio(); generando = false;
+        if (textoCliente) cerrarCliente();
+        handle = null;
+        contextoRetomado = self.history.map(t => `${t.role === "user" ? "LA OTRA PERSONA" : "VOS"}: ${t.content}`).join("\n");
+        try { token = await pedirToken({ idx: keyIdx, motivo: reason }); } catch (_) {}
+        if (ended) return;
+        setState("connecting");
+        abrir();
+        return;
+      }
       // Ya estábamos hablando: Google corta cada ~10 minutos o se cayó la red. Retomamos la sesión.
       if (handle && reintentos < 2) {
         reintentos++;
@@ -1088,6 +1130,7 @@ registerProcessor("mic-pcm", MicPcm);`;
       system = sys || "";
       primerTurno = firstUserTurn || "Hablá vos primero, corto.";
       ended = false; conectado = false; finPendiente = false; handle = null;
+      cambiosDeKey = 0; contextoRetomado = "";
       self.history = [];
       setState("connecting");
       if (typeof WebSocket === "undefined" || !(window.AudioContext || window.webkitAudioContext)) {

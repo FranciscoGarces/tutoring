@@ -69,6 +69,33 @@ Y `http://localhost:3000/api/diagnostico` suma, desde que arrancó el servidor, 
 
 Opcionales en el `.env`: `PROMPT_CACHE=off` lo apaga (los pedidos salen exactamente como antes) y `PROMPT_CACHE_TTL=1h` lo hace durar una hora con Claude por API (escribirlo cuesta el doble).
 
+## Antes de una demo: `npm run chequeo`
+
+Prueba de verdad todo lo que se usa en vivo, con la sesión de Claude y las keys de esta compu. No hay botón en la interfaz: se corre solo desde la consola (con o sin el servidor abierto; levanta su propia copia en otro puerto y no toca tus datos).
+
+```
+npm run chequeo               # todo, unos 2 minutos
+npm run chequeo -- --rapido   # sin las evaluaciones largas, unos 20 segundos
+```
+
+Revisa, en orden: la sesión de Claude Code y una respuesta corta; una evaluación real con Claude (con la empresa cargada y una transcripción de prueba); los respaldos (Claude por API y Gemini); cada key de Gemini Live (abre una sesión de voz y espera el primer audio), y una evaluación de punta a punta por el mismo camino que la app. Al final dice **LISTO PARA LA DEMO** o qué hay que resolver. Nunca imprime una key.
+
+### Cómo se protege la evaluación
+
+1. Arranca **Claude con tu suscripción** (`claude-sdk`). Lo normal es que tarde unos 20 segundos.
+2. Si a los 25 segundos todavía no terminó, o si falla antes, arranca **un segundo intento con Claude en paralelo**: por API si hay `ANTHROPIC_API_KEY` (no depende de tu suscripción) o, si no, Claude Code otra vez en un proceso nuevo. Gana el primero que entrega un informe válido y el otro se cancela.
+3. Si fallan los dos, sigue Claude por API (si no corrió) y por último Gemini.
+
+Se ajusta con `EVAL_CARRERA_MS`, `EVAL_SILENCIO_MS` y `LLM_EVAL_CADENA` en el `.env`.
+
+### Keys de respaldo para la voz
+
+`GEMINI_LIVE_API_KEY_2` y `GEMINI_LIVE_API_KEY_3`: keys de **otras cuentas de Google** (cada cuenta tiene su propia cuota gratis). Si la `GEMINI_API_KEY` se queda sin cuota o Google la rechaza, la llamada sigue con la siguiente; si pasa a mitad de la llamada, se reconecta con la otra key y el cliente sigue desde donde quedó. Ojo: el error "mucha demanda" (503) es del lado de Google y no depende de la key.
+
+### Registro
+
+Cada consulta a la IA deja una línea en la terminal y en `data/logs/ia-AAAA-MM-DD.log`: proveedor, modelo, cuánto tardó, a los cuántos segundos llegó el primer texto y, si falla, qué significa y qué hacer. Todos los intentos de una misma evaluación comparten un código (`#a1b2`) y al final hay un resumen (`✓ evaluación lista con...` o `✗ la evaluación falló...`).
+
 ## Qué hay en cada perfil
 
 | Perfil | Qué hace |

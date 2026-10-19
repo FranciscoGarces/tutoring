@@ -405,9 +405,693 @@ La cocina puede preparar papas al horno en bandeja aparte. Siempre confirmar con
     notasEvaluacion: "Preferimos un \"lo consulto con cocina y vuelvo en dos minutos\" a una respuesta rápida inventada. Con las alergias no hay margen de error."
   };
 
+  // ================================================================ Empresas para la reunión con UTEC
+  // Empresas FICTICIAS, armadas a partir del rubro de quienes vienen a la reunión, para que cada uno vea una
+  // simulación de su propio mundo. Nombres de empresas y personas inventados.
+  // Los 7 criterios son los mismos de Nodo (sustento de RRHH); cambia cuánto pesa cada uno según el negocio.
+  const criteriosCon = (pesos, ajustes = {}) => nodo.criterios.map((c, i) => ({
+    ...JSON.parse(JSON.stringify(c)), peso: pesos[i], ...(ajustes[c.nombre] ? { descripcion: ajustes[c.nombre] } : {})
+  }));
+
+  // ---------------------------------------------------------------- Puerta a Puerta (importación B2B)
+  const puerta = {
+    version: 2,
+    empresa: "Puerta a Puerta Importaciones",
+    rubro: "Comercio",
+    responsable: { nombre: "Martín Ledesma", rol: "Gerente general" },
+
+    contextos: [
+      g("proposito", `Puerta a Puerta trae de Estados Unidos insumos, herramientas y equipamiento para empresas y PyMEs argentinas que no los consiguen acá o los consiguen mucho más caros.
+El cliente elige el producto y nosotros nos ocupamos de todo lo demás: compra, flete, aduana, impuestos y entrega en su puerta.
+Nuestra promesa es un precio final cerrado y sin sorpresas, con Factura A. Si un cliente se entera de un costo extra al final, perdimos su confianza.
+Somos 18 personas en Bella Vista (Provincia de Buenos Aires) y un depósito propio en Miami.`),
+      g("oferta", `Productos: herramientas eléctricas y de taller, repuestos de maquinaria, equipamiento para laboratorios y consultorios, insumos de impresión y electrónica.
+Precio final "puerta a puerta": valor del producto + flete internacional + nacionalización e impuestos de aduana + envío a destino en todo el país.
+Plazos habituales: courier, de 10 a 15 días hábiles; carga general, de 25 a 40 días hábiles.
+Clientes: talleres metalúrgicos, estudios de arquitectura, consultorios odontológicos, laboratorios, pymes industriales del conurbano y del interior.
+Lo que más valoran: que el precio no cambie, saber en qué estado está su pedido y que alguien les conteste rápido.`),
+      g("trabajo", `Cada cliente tiene un ejecutivo de cuentas que lo acompaña de la cotización a la entrega.
+Circuito: consulta → cotización (en 24 h hábiles) → seña del 50% → compra en EE.UU. → envío al depósito de Miami → embarque → aduana → entrega → saldo.
+Operaciones (Paula y su equipo) maneja embarques y aduana con un despachante externo. Compras en Miami confirma stock y medidas.
+Todo queda en el CRM: cada llamada, cada promesa y cada cambio de estado del pedido.
+Weekly de pedidos los lunes a las 9; los pedidos en riesgo se revisan con gerencia.`),
+      g("problemas", `1. Escuchar al cliente completo y anotar qué necesita y para cuándo de verdad.
+2. Revisar el estado real del pedido en el CRM y con Operaciones antes de dar una respuesta.
+3. Ser honesto con los plazos: dar un rango, nunca una fecha exacta que no depende de nosotros.
+4. Ofrecer alternativas reales (otro modelo en stock, otra vía de envío, entrega parcial).
+5. Si cambia el precio o el plazo, avisar antes de que el cliente lo descubra solo.
+6. Dejar registrado en el CRM lo que se habló y el próximo contacto.`),
+      g("clientes", `Tuteamos a los clientes de siempre, pero con respeto profesional.
+Respondemos en el día, aunque sea para decir "lo estoy averiguando, te escribo mañana a las 11".
+Nunca le echamos la culpa a la aduana, al courier ni a un compañero: el pedido es nuestro.
+Explicamos los costos sin palabras de comercio exterior: si usamos una, la traducimos.
+Si no sabemos algo, lo decimos y nos comprometemos a una hora de respuesta.`),
+      g("calidad", `- Toda cotización se entrega en 24 h hábiles, con precio final y plazo en rango.
+- El precio cotizado no cambia, salvo que el cliente cambie el pedido.
+- El cliente recibe una actualización de estado al menos una vez por semana.
+- Cada pedido tiene en el CRM: modelo exacto, voltaje, cantidad, CUIT y dirección de entrega.
+- Cero facturas con error de datos fiscales.`),
+      g("restricciones", `No prometer fechas exactas de entrega: siempre en rango y aclarando de qué depende.
+Descuentos, cambios de precio o devolución de seña: solo gerencia.
+No se aceptan productos que requieren permisos especiales (medicamentos, armas, alimentos) sin consultar a Operaciones.
+Un ejecutivo junior no confirma compras de más de USD 5.000 sin que las revise su supervisor.`),
+      p("p-aduana", "Pedidos demorados en aduana", `Las demoras más comunes: falta un certificado (por ejemplo, de seguridad eléctrica), la factura del proveedor no coincide con el producto o el producto cae en un control.
+Lo primero es preguntarle a Operaciones qué falta exactamente y cuánto tarda conseguirlo.
+Al cliente se le explica qué pasó, qué estamos haciendo y cuándo le volvemos a escribir. Nunca "está en aduana, no sabemos".
+Si la demora genera costos de almacenaje, los absorbemos nosotros cuando el error fue nuestro: lo confirma gerencia.`)
+    ],
+
+    tareaEjemplo: {
+      entender: "¿Qué incluye exactamente nuestro precio \"puerta a puerta\" y por qué lo cotizamos así?",
+      trabajo: "Contame el circuito de un pedido, desde que entra la consulta hasta que cobramos el saldo. ¿Quién hace cada cosa?",
+      tarea: "Un cliente pide traer 3 amoladoras DeWalt y un compresor. No dijo voltaje ni si necesita Factura A. ¿Qué le pregunto antes de cotizar?",
+      revisar: "Revisá este mensaje antes de mandárselo a un cliente:\n\n\"Hola Raúl, tu pedido está en aduana. No sabemos cuándo sale, depende de ellos. Apenas sepamos algo te aviso. Saludos.\""
+    },
+
+    escenarios: [
+      {
+        id: "pap-cotizacion",
+        titulo: "Cotización con datos que faltan",
+        resumen: "El dueño de un taller metalúrgico te llama para que le traigas un equipo que vio en internet. Antes de cotizar, tenés que entender qué necesita de verdad.",
+        modalidad: "llamada",
+        cliente: "Raúl Ferreyra, dueño de un taller metalúrgico en Pilar. Cliente nuevo, lo recomendó otro taller.",
+        personalidad: "Amable y conversador, pero no sabe de importación y da por obvias cosas que no lo son. Si le preguntan bien, colabora; si lo llenan de términos técnicos, se pierde y se pone desconfiado.",
+        situacion: "Quiere \"un compresor como el que vio en un video\" y tres amoladoras. Pide el precio \"más o menos\" para hoy.\nDatos que solo da si le preguntan: no sabe el modelo exacto del compresor, pero tiene el link; el taller tiene corriente trifásica de 380 V; necesita Factura A a nombre de su empresa; le urge el compresor, las amoladoras no; su presupuesto tope es de unos cuatro millones de pesos.",
+        objetivo: "Hacer las preguntas necesarias antes de cotizar (modelo, voltaje, urgencia, facturación) y explicar en simple qué incluye el precio final y el plazo en rango.",
+        cierre: "Se resuelve cuando el candidato junta los datos clave y le dice qué le va a mandar y cuándo. Si le tira un precio sin preguntar el voltaje o el modelo, Raúl lo acepta contento, pero se despide diciendo \"entonces queda en ese precio, ¿no?\".",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Cotización", significa: "el presupuesto con precio final y plazo que se le pasa al cliente." },
+          { termino: "Factura A", significa: "la factura que necesita una empresa para descontar el IVA." },
+          { termino: "Voltaje", significa: "el tipo de corriente que usa el equipo; en EE.UU. es distinto que acá." }
+        ]
+      },
+      {
+        id: "pap-urgente",
+        titulo: "Un repuesto \"para el lunes\"",
+        resumen: "Una clínica odontológica necesita un repuesto para un equipo parado y te pide que llegue en cinco días. El plazo real es mucho más largo.",
+        modalidad: "llamada",
+        cliente: "Carolina Ruiz, administradora de una clínica odontológica en San Miguel. Ya compró dos veces con Puerta a Puerta.",
+        personalidad: "Apurada y práctica. Tiene a los odontólogos encima. Si le dicen la verdad con alternativas, se ordena y decide rápido; si le dan vueltas o le prometen algo que suena imposible, se pone tensa y pide hablar con alguien más.",
+        situacion: "El autoclave (el equipo que esteriliza el instrumental) se rompió y el repuesto solo se consigue en EE.UU. Pide que llegue el lunes.\nDatos que solo da si le preguntan: tiene un autoclave viejo que funciona a media máquina; pueden sacar la mitad de los turnos; el técnico le dijo que el repuesto exacto es el código 4021-B; puede pagar un envío más caro si llega antes.",
+        objetivo: "No prometer un plazo imposible, dar un rango honesto según la vía de envío, ofrecer la opción más rápida con su costo y acordar cuándo confirma.",
+        cierre: "Se resuelve cuando Carolina sabe qué opción tiene, cuánto tarda en rango y cuándo le confirman stock. Si el candidato le promete el lunes, ella dice \"perfecto, lo anoto\" y corta conforme (es el error que se evalúa).",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Courier", significa: "envío rápido puerta a puerta para paquetes chicos; es más caro." },
+          { termino: "Días hábiles", significa: "días de semana, sin contar sábados, domingos ni feriados." },
+          { termino: "Stock", significa: "si el proveedor tiene el producto disponible para mandar ya." }
+        ]
+      },
+      {
+        id: "pap-aduana",
+        titulo: "Pedido trabado en aduana",
+        resumen: "El pedido de un cliente quedó demorado en aduana porque falta un certificado. Te toca avisarle, y él tiene una obra esperando ese equipo.",
+        modalidad: "llamada",
+        cliente: "Hernán Gallo, socio de un estudio de arquitectura que hace obras en Tigre. Pagó la seña hace 30 días.",
+        personalidad: "Molesto desde el principio: ya le dijeron dos veces que \"estaba por salir\". Si le explican qué pasó de verdad y le dan un plan con fecha de contacto, baja el tono. Si le dicen \"es la aduana\" o lo culpan a él, se enoja y pide la devolución de la seña.",
+        situacion: "Las tres hidrolavadoras industriales que pidió están retenidas porque falta el certificado de seguridad eléctrica. Operaciones dice que conseguirlo lleva entre 7 y 10 días hábiles.\nDatos que solo da si le preguntan: la obra arranca la semana que viene; podría arreglarse con una sola máquina al principio; el año pasado le pasó algo parecido con otro importador y nunca le devolvieron la plata; si le cobran almacenaje, no lo va a pagar.",
+        objetivo: "Comunicar la mala noticia sin culpar a nadie, explicar qué falta y qué se está haciendo, no prometer una fecha que no depende de nosotros y acordar el próximo contacto. Derivar a gerencia lo de la seña o el almacenaje.",
+        cierre: "Se resuelve cuando Hernán entiende qué pasó, qué se hace y cuándo lo vuelven a llamar. Si el candidato promete que sale \"esta semana\" o acepta devolver la seña por su cuenta, Hernán pide que se lo manden por escrito y corta frío.",
+        duracion: 5,
+        dificultad: "Alta",
+        glosario: [
+          { termino: "Aduana", significa: "el control del Estado sobre lo que entra al país." },
+          { termino: "Certificado de seguridad eléctrica", significa: "papel que prueba que un equipo eléctrico es seguro para usar acá." },
+          { termino: "Seña", significa: "la parte del precio que el cliente pagó por adelantado." },
+          { termino: "Almacenaje", significa: "lo que cobra el depósito de la aduana por cada día que la mercadería queda ahí." }
+        ]
+      },
+      {
+        id: "pap-weekly",
+        titulo: "Weekly de pedidos: uno está en riesgo",
+        resumen: "Es lunes, weekly de pedidos por videollamada. Tu supervisora repasa tus pedidos y uno está en riesgo, pero en el CRM no lo actualizaste.",
+        modalidad: "llamada",
+        cliente: "Laura Méndez, supervisora comercial de Puerta a Puerta. Tu jefa directa desde que entraste hace un mes.",
+        personalidad: "Ordenada, directa y justa. Le molesta enterarse tarde de los problemas, no que existan. Si le contás la situación con datos y le pedís ayuda concreta, te apoya; si minimizás o das vueltas, repregunta seco y se pone más exigente.",
+        situacion: "Laura repasa tus seis pedidos abiertos. Cuando llega al de las hidrolavadoras de un estudio de arquitectura, ve en el CRM \"en tránsito\", pero vos sabés desde el viernes que está trabado en aduana.\nDatos que solo da si le preguntan: gerencia revisa los pedidos en riesgo los martes; Operaciones puede averiguar hoy cuánto tarda el certificado; el cliente ya reclamó dos veces por WhatsApp a la cuenta general; ella prefiere un aviso con \"todavía no sé\" antes que el silencio.",
+        objetivo: "Contar el problema con honestidad y datos, reconocer que no actualizó el CRM, pedir ayuda concreta y acordar los próximos pasos con fecha.",
+        cierre: "Se resuelve cuando Laura sabe el estado real, quién habla con el cliente y cuándo, y qué se lleva a gerencia. Si el candidato dice que está todo bien o culpa a Operaciones, Laura cierra la weekly con un \"después lo hablamos vos y yo\".",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Weekly", significa: "reunión semanal del equipo para repasar el estado de los pedidos." },
+          { termino: "CRM", significa: "el sistema donde se registra cada cliente, cada llamada y el estado de cada pedido." },
+          { termino: "Pedido en riesgo", significa: "un pedido que puede no llegar en el plazo que se le dijo al cliente." }
+        ]
+      }
+    ],
+
+    criterios: criteriosCon([15, 15, 15, 20, 10, 15, 10]),
+    notasEvaluacion: "Valoramos la honestidad con los plazos y los costos por encima de cerrar rápido. Preferimos un \"lo confirmo con Operaciones y te escribo a las 11\" antes que una fecha inventada. Ningún cliente se tiene que enterar de un costo extra al final."
+  };
+
+  // ---------------------------------------------------------------- Andamio (consultora de proyectos IT)
+  const andamio = {
+    version: 2,
+    empresa: "Andamio Consultora",
+    rubro: "Servicios de tecnología",
+    responsable: { nombre: "Lucía Ferraro", rol: "Cofundadora y product manager" },
+
+    contextos: [
+      g("proposito", `Andamio es una consultora de gestión de proyectos tecnológicos. Ayudamos a organismos públicos y empresas a convertir una necesidad en un sistema que funciona, en tiempo y con un alcance claro.
+Nacimos hace tres años con una premisa: el trato, las formas y el profesionalismo no se negocian, y nadie en el equipo es un número.
+Creemos que sin juniors no hay seniors: formamos gente y la acompañamos.
+Somos 35 personas, con oficina en Palermo y trabajo híbrido.`),
+      g("oferta", `Servicios: gestión de proyectos (project managers y PMO), desarrollo de software a medida (backend .NET, frontend web), tableros de datos (Power BI) y consultoría de procesos.
+Clientes: ministerios y secretarías provinciales, municipios del conurbano, y empresas medianas que digitalizan trámites o áreas internas.
+Proyectos típicos: sistema de expedientes digitales, turnos para trámites, tablero de indicadores para un ministro, migración de un sistema viejo.
+Lo que más valoran los clientes: que les digan la verdad sobre el avance, informes ejecutivos claros y que el sistema salga andando.`),
+      g("trabajo", `Trabajamos con Scrum: sprints de dos semanas, daily de 15 minutos a las 9:30, review con el cliente al final de cada sprint y retrospectiva interna.
+Cada proyecto tiene un project manager, un tech lead y el equipo de desarrollo. El PM es el que habla con el cliente.
+Herramientas: Jira para tareas, Notion para documentación, Teams con los clientes públicos y Slack interno.
+Cada viernes el PM manda un informe ejecutivo de una página: avance, riesgos y próximos pasos.
+Algunos proyectos piden viajar a provincia para relevamientos y capacitaciones.`),
+      g("problemas", `1. Entender bien el problema antes de proponer: qué pasa, a quién afecta y qué se intentó.
+2. Separar lo urgente de lo importante con datos (horas disponibles, impacto, dependencias).
+3. Hablarlo con el tech lead antes de comprometer algo con el cliente.
+4. Proponer opciones con su costo: qué entra, qué sale y qué se mueve.
+5. Dejar por escrito lo acordado (minuta o Jira) y con quién se acordó.
+6. En la retro, revisar qué hacer distinto la próxima.`),
+      g("clientes", `Con organismos públicos, trato formal y de usted hasta que el cliente proponga otra cosa.
+Las malas noticias se dan temprano y con un plan: un atraso que el cliente descubre solo es mucho peor que uno avisado.
+Nunca se habla mal del equipo ni de otro proveedor delante del cliente.
+Se traduce lo técnico: el cliente no tiene por qué saber qué es un endpoint.
+Toda reunión con el cliente termina con próximos pasos, responsables y fechas.`),
+      g("calidad", `- Cada historia de usuario tiene criterios de aceptación antes de entrar al sprint.
+- Ningún cambio de alcance entra al sprint sin pasar por el PM y el tech lead.
+- El informe ejecutivo sale todos los viernes antes de las 17.
+- Los riesgos se informan apenas aparecen, con su impacto en días.
+- Todo lo que se entrega pasa por revisión de código y pruebas.`),
+      g("restricciones", `Un PM junior no compromete fechas de entrega ni cambios de alcance sin el tech lead.
+Presupuesto, horas extra facturables y contratos: solo dirección.
+No se comparten datos de un cliente con otro, ni se usan datos reales de ciudadanos en ambientes de prueba.
+Con organismos públicos, todo acuerdo importante queda por escrito (mail o minuta firmada).`)
+    ],
+
+    tareaEjemplo: {
+      entender: "¿Para qué sirve el informe ejecutivo de los viernes y qué tiene que tener sí o sí?",
+      trabajo: "Contame cómo es un sprint en Andamio, desde la planificación hasta la retro. ¿Qué hace el PM en cada ceremonia?",
+      tarea: "El cliente del Municipio me pide por mail \"un tablero con todo lo de turnos\" para la semana que viene. ¿Cómo encaro el relevamiento?",
+      revisar: "Revisá esta minuta antes de mandarla:\n\n\"Reunión con Producción. Se habló del módulo de expedientes. Hay algunos atrasos. Se va a ver. Próxima reunión a definir.\""
+    },
+
+    escenarios: [
+      {
+        id: "and-relevamiento",
+        titulo: "Un pedido ambiguo: \"queremos un tablero\"",
+        resumen: "La referente de un municipio cliente te llama para pedir \"un tablero con todo lo de turnos\". Tenés que entender qué necesita antes de comprometer nada.",
+        modalidad: "llamada",
+        cliente: "Silvina Acosta, coordinadora de Atención Ciudadana del Municipio de Villa Arroyo (cliente de Andamio desde hace un año).",
+        personalidad: "Colaboradora y con buena onda, pero habla en general y mezcla lo que quiere con lo que vio en otro municipio. Si le preguntan bien, ordena la idea; si le proponen soluciones antes de entender, se entusiasma con cualquier cosa.",
+        situacion: "Quiere \"un tablero con todo lo de turnos\" para mostrarle al intendente.\nDatos que solo da si le preguntan: lo quiere ver el intendente una vez por semana; lo que más le preocupa es cuánta gente falta a los turnos; los datos están en el sistema de turnos que hizo Andamio y en una planilla de Excel aparte; la reunión con el intendente es en tres semanas.",
+        objetivo: "Hacer preguntas para entender para qué es, quién lo usa y con qué datos, y cerrar con un próximo paso concreto sin prometer el tablero completo.",
+        cierre: "Se resuelve cuando quedan claros el objetivo, el usuario y los datos, y se acuerda un próximo paso (por ejemplo, una reunión de relevamiento con fecha). Si el candidato promete \"todo\" para la semana que viene, Silvina se va contenta y eso es justamente lo que se evalúa.",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Tablero", significa: "una pantalla con gráficos e indicadores para ver cómo va algo." },
+          { termino: "Relevamiento", significa: "reunión para entender qué necesita el cliente antes de diseñar." },
+          { termino: "Indicador", significa: "un número que muestra cómo va algo (por ejemplo, el % de ausentismo)." }
+        ]
+      },
+      {
+        id: "and-alcance",
+        titulo: "\"Lo necesitamos para el lunes, viene el ministro\"",
+        resumen: "A mitad de sprint, el director del ministerio cliente te pide sumar una función nueva para una visita del ministro. El equipo ya está al tope.",
+        modalidad: "llamada",
+        cliente: "Gabriel Sosa, director de Modernización del Ministerio de Producción de la provincia (cliente).",
+        personalidad: "Ejecutivo, apurado y con presión política. Cree que es \"un cambio chiquito\". Respeta a quien le habla con datos y opciones; si le dicen solo que no, sube el tono y menciona que \"hay otras consultoras\".",
+        situacion: "Pide que el sistema de expedientes permita descargar un reporte en PDF para mostrarle al ministro el lunes.\nDatos que solo da si le preguntan: al ministro le alcanza con ver tres números (expedientes ingresados, resueltos y demorados); la visita es el lunes a las 10; podría servir un reporte armado a mano por única vez; el pedido formal todavía no está por escrito.",
+        objetivo: "Entender qué necesita de verdad el ministro, no comprometer el cambio sin consultar al tech lead y proponer una alternativa realista para el lunes, dejando por escrito lo acordado.",
+        cierre: "Se resuelve cuando Gabriel tiene una propuesta concreta para el lunes y sabe cuándo le confirman. Si el candidato dice que sí a todo, Gabriel corta conforme pidiendo \"mandámelo por mail\". Si dice que no sin alternativa, insiste y la llamada termina tensa.",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Sprint", significa: "período de dos semanas con tareas ya comprometidas." },
+          { termino: "Alcance", significa: "qué incluye y qué no incluye lo que se entrega." },
+          { termino: "Tech lead", significa: "el responsable técnico del equipo de desarrollo." }
+        ]
+      },
+      {
+        id: "and-atraso",
+        titulo: "Avisar un atraso de dos semanas",
+        resumen: "En la weekly con el cliente tenés que comunicar que el módulo de expedientes se atrasa dos semanas. El cliente no lo sabe todavía.",
+        modalidad: "llamada",
+        cliente: "Mariela Quiroga, subsecretaria de Gestión Pública de la provincia. Responsable del proyecto del lado del cliente.",
+        personalidad: "Seria y exigente; ya le prometió la fecha al ministro. Se enoja si siente que le ocultaron algo o si le echan la culpa a su equipo. Se calma con un plan claro, con fechas de control y con alguien que se haga cargo.",
+        situacion: "El módulo de expedientes iba a estar en producción el día 15 y ahora es el 29.\nDatos que solo da si le preguntan (o que aparecen si el candidato explica bien): el equipo del ministerio tardó 8 días en dar los accesos al servidor; una desarrolladora del proyecto se fue de la consultora; se puede entregar el día 15 una parte (la carga de expedientes) y el resto el 29; Mariela tiene reunión con el ministro el jueves.",
+        objetivo: "Dar la mala noticia temprano y sin vueltas, explicar las causas sin culpar al cliente, proponer un plan (entrega parcial, fechas de control) y acordar cómo se informa al ministro.",
+        cierre: "Se resuelve cuando hay una nueva fecha en rango, una entrega parcial acordada y un próximo contacto antes del jueves. Si el candidato culpa al ministerio por los accesos o minimiza el atraso, Mariela pide hablar con dirección y la llamada termina mal.",
+        duracion: 5,
+        dificultad: "Alta",
+        glosario: [
+          { termino: "Weekly", significa: "reunión semanal de seguimiento con el cliente." },
+          { termino: "Producción", significa: "el sistema real, el que usan los usuarios todos los días." },
+          { termino: "Entrega parcial", significa: "entregar una parte que ya funciona mientras se termina el resto." }
+        ]
+      },
+      {
+        id: "and-daily",
+        titulo: "Daily: un bloqueo que nadie levantó",
+        resumen: "Estás en la daily del equipo por Meet. Hace tres días que el cliente no manda los datos de prueba y el equipo está trabado. Te toca plantearlo al tech lead.",
+        modalidad: "llamada",
+        cliente: "Julián Ortega, tech lead del proyecto de expedientes en Andamio. Muy bueno técnicamente y con poca paciencia para las dailies largas.",
+        personalidad: "Rápido y cortante en la daily: quiere qué hiciste, qué vas a hacer y qué te traba, en un minuto. No es mala onda: si le planteás el bloqueo concreto y una propuesta, se suma y ayuda; si das vueltas o contás todo el detalle, te corta con un \"eso lo hablamos después\".",
+        situacion: "Hace tres días que el ministerio no manda los datos de prueba anonimizados y dos desarrolladores no pueden probar la carga de expedientes. Vos pediste los datos por mail dos veces y no contestaron.\nDatos que solo da si le preguntan: Julián tiene el teléfono del referente técnico del ministerio; se podrían armar datos ficticios en medio día para no frenar; el sprint termina el viernes; la review con el cliente es el lunes.",
+        objetivo: "Plantear el bloqueo en forma breve y clara, pedir ayuda concreta, proponer una alternativa para no frenar al equipo y acordar quién hace qué hoy.",
+        cierre: "Se resuelve cuando queda claro quién contacta al ministerio, qué se hace mientras tanto y cuándo se revisa. Si el candidato no menciona el bloqueo o lo cuenta sin proponer nada, Julián pasa al siguiente y el problema queda sin dueño.",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Daily", significa: "reunión diaria de 15 minutos: qué hice, qué voy a hacer y qué me traba." },
+          { termino: "Bloqueo", significa: "algo que impide avanzar y que no depende de uno." },
+          { termino: "Datos de prueba", significa: "datos para probar el sistema sin usar información real de personas." }
+        ]
+      }
+    ],
+
+    criterios: criteriosCon([15, 10, 15, 20, 15, 15, 10]),
+    notasEvaluacion: "Valoramos que la mala noticia se dé temprano y con un plan, y que no se comprometa alcance ni fechas sin consultar. Un buen PM pregunta antes de proponer y deja todo por escrito. El buen trato no se negocia, ni siquiera bajo presión."
+  };
+
+  // ---------------------------------------------------------------- Mostrador (gestión comercial y listas de precios)
+  const mostrador = {
+    version: 2,
+    empresa: "Mostrador Gestión",
+    rubro: "Software de gestión comercial",
+    responsable: { nombre: "Diego Ferreyra", rol: "Socio gerente" },
+
+    contextos: [
+      g("proposito", `Mostrador Gestión hace un sistema de gestión para comercios con miles de artículos: ferreterías, librerías, cotillones y casas de repuestos.
+Hace más de 15 años que ayudamos al comerciante a tener los precios al día, facturar sin trabas y saber qué vende.
+Nuestro diferencial es ListaYa: el comerciante nos reenvía la lista de precios que le manda su distribuidor y nosotros la dejamos lista para que el sistema la actualice sola.
+Con inflación y listas que cambian cada semana, un precio viejo es plata que el comerciante pierde.`),
+      g("oferta", `Mostrador Gestión (sistema de escritorio con base de datos SQL Server): artículos, listas de precios, facturación electrónica y con controlador fiscal, cuentas corrientes, caja y estadísticas.
+ListaYa (servicio mensual): el cliente reenvía la lista del distribuidor a actualizaciones@mostradorgestion.com.ar; el equipo la normaliza (columnas, códigos, IVA) y el sistema la descarga y actualiza los precios.
+Soporte de software por teléfono, WhatsApp y acceso remoto; soporte de hardware (impresoras fiscales, lectores) en zona norte del conurbano.
+Clientes: unos 400 comercios, la mayoría de 1 a 10 empleados, en todo el país.
+Lo que más valoran: que el sistema no se caiga en horario de atención y que los precios estén bien.`),
+      g("trabajo", `Soporte atiende de lunes a viernes de 8 a 19 y los sábados de 9 a 13 (los comercios abren los sábados).
+Cada consulta se carga como ticket con: comercio, contacto, qué pasa, desde cuándo y qué se hizo.
+Las listas de ListaYa se procesan en el día si llegan antes de las 15; si no, al día siguiente a la mañana.
+Antes de publicar una lista normalizada, se controla una muestra de 20 artículos contra la lista original.
+Los problemas de facturación electrónica los ve el técnico de turno; el soporte junior hace el primer diagnóstico.`),
+      g("problemas", `1. Escuchar qué ve el comerciante en la pantalla, con sus palabras.
+2. Preguntar desde cuándo pasa, qué cambió y si le pasa en una o en todas las computadoras.
+3. Pedir permiso para conectarse por acceso remoto antes de tocar nada.
+4. Si hay ventas trabadas, buscar primero una forma de que pueda seguir vendiendo.
+5. Si no lo resolvés en 15 minutos, pasarlo al técnico de turno con el ticket completo.
+6. Volver a llamar al cliente para confirmar que quedó andando.`),
+      g("clientes", `El comerciante suele estar atendiendo gente: hablale corto, claro y sin tecnicismos.
+Nunca decir "eso es un problema de tu computadora" sin haberlo revisado.
+Si el error fue nuestro, se reconoce y se arregla primero; las explicaciones vienen después.
+Damos una hora concreta de respuesta y la cumplimos.
+Con los clientes de muchos años, mucho respeto: varios nos conocen desde que empezamos.`),
+      g("calidad", `- Toda llamada de soporte queda en un ticket completo.
+- Un comercio sin poder facturar se atiende primero que cualquier otra consulta.
+- Las listas de ListaYa se publican solo después del control de muestra.
+- El cliente recibe un aviso cuando su lista ya está actualizada.
+- Cero accesos remotos sin permiso del cliente.`),
+      g("restricciones", `Un soporte junior no borra datos ni modifica la base de datos de un cliente.
+Bonificaciones del abono o compensaciones: solo los socios.
+No se toca la configuración fiscal (punto de venta, certificados) sin el técnico de turno.
+No se les dice a los clientes qué precios pone la competencia ni se comparten listas de un comercio con otro.`)
+    ],
+
+    tareaEjemplo: {
+      entender: "¿Cómo funciona ListaYa, desde que el comerciante reenvía la lista hasta que ve los precios nuevos?",
+      trabajo: "¿Cómo es un sábado de soporte? ¿Qué priorizo si entran tres llamadas a la vez?",
+      tarea: "Una ferretería dice que \"el sistema anda lento\" desde ayer. ¿Qué le pregunto primero?",
+      revisar: "Revisá este ticket antes de pasárselo al técnico:\n\n\"Llamó un cliente, no puede facturar. Le dije que reinicie.\""
+    },
+
+    escenarios: [
+      {
+        id: "mos-lista",
+        titulo: "\"Mandé la lista y los precios no cambiaron\"",
+        resumen: "La dueña de una librería mandó la lista nueva de su distribuidor hace dos días y sigue viendo los precios viejos. Tenés que entender qué pasó.",
+        modalidad: "llamada",
+        cliente: "Norma Benítez, dueña de una librería escolar en José C. Paz. Clienta de ListaYa hace cuatro años.",
+        personalidad: "Amable y paciente, pero no es de la computación y describe todo a su manera. Si le preguntan con calma, colabora; si le hablan rápido o en difícil, se confunde y dice que sí a todo.",
+        situacion: "Mandó la lista del distribuidor de útiles el martes y hoy, jueves, ve los precios viejos.\nDatos que solo da si le preguntan: la mandó desde el mail personal de su hija, no desde el de la librería; el archivo era una foto de la lista en papel; los precios que no cambiaron son solo los de ese distribuidor; la semana que viene empiezan las compras de útiles para las vacaciones de invierno.",
+        objetivo: "Hacer preguntas simples para encontrar la causa, explicar sin tecnicismos qué hay que hacer y acordar cuándo queda actualizado.",
+        cierre: "Se resuelve cuando Norma sabe qué pasó, qué tiene que hacer (o qué hace Mostrador) y cuándo le avisan. Si el candidato no pregunta desde dónde la mandó, Norma se despide sin resolver y dice \"bueno, la vuelvo a mandar igual\".",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Lista de precios", significa: "el archivo que manda el distribuidor con los precios nuevos de cada artículo." },
+          { termino: "Normalizar", significa: "acomodar la lista para que el sistema la entienda (columnas, códigos, IVA)." }
+        ]
+      },
+      {
+        id: "mos-factura",
+        titulo: "Sábado a la mañana: no puede facturar",
+        resumen: "Un sábado a las 11, una ferretería con el mostrador lleno no puede emitir facturas. El dueño te llama apurado.",
+        modalidad: "llamada",
+        cliente: "Jorge Romero, dueño de una ferretería grande en San Miguel, con tres empleados en el mostrador.",
+        personalidad: "Apurado y nervioso: tiene gente esperando. Habla rápido y corta. Si le dan una salida concreta para seguir vendiendo y una hora de respuesta, se calma; si le preguntan cosas que no entiende o le dicen \"esperá\", se impacienta.",
+        situacion: "Desde las 10:30 el sistema le dice \"error al obtener CAE\" cada vez que quiere facturar.\nDatos que solo da si le preguntan: le pasa en las tres computadoras; ayer facturó sin problemas; el contador le dijo hace un mes que \"había que renovar algo\" y no le dio importancia; puede anotar las ventas a mano y facturarlas después si alguien le dice que está bien.",
+        objetivo: "Hacer un diagnóstico rápido con preguntas simples, darle una forma de seguir vendiendo dentro de lo permitido, derivar al técnico de turno con el caso completo y comprometer una hora de llamado.",
+        cierre: "Se resuelve cuando Jorge sabe qué hacer mientras tanto y cuándo lo llama el técnico. Si el candidato intenta tocar la configuración fiscal por su cuenta o le dice \"no sé, esperá\", Jorge corta diciendo que va a llamar a su contador.",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Factura electrónica", significa: "la factura que se autoriza por internet con el organismo de recaudación." },
+          { termino: "CAE", significa: "el código que autoriza cada factura electrónica; sin él, la factura no vale." },
+          { termino: "Certificado digital", significa: "la credencial que vence cada tanto y permite facturar electrónicamente." }
+        ]
+      },
+      {
+        id: "mos-precios-mal",
+        titulo: "Vendió todo el día con precios mal",
+        resumen: "Una casa de repuestos vendió todo el día con precios 21% más bajos por un error en la lista que normalizó Mostrador. El dueño está furioso.",
+        modalidad: "llamada",
+        cliente: "Claudio Medina, dueño de una casa de repuestos para autos en Moreno. Cliente desde hace nueve años.",
+        personalidad: "Furioso y dolido: siente que perdió plata por culpa de otro. Levanta la voz al principio. Si lo escuchan sin interrumpir, le reconocen el error y le proponen algo concreto, va bajando; si le explican cómo funciona la lista o le hablan de \"un error del sistema\", amenaza con dar de baja el servicio.",
+        situacion: "La lista de su distribuidor principal traía los precios con IVA incluido y en la normalización se tomaron como sin IVA: todos los artículos de esa marca quedaron 21% más baratos. Vendió así todo el día.\nDatos que solo da si le preguntan: fueron unas 60 ventas de esa marca; tiene la lista original en papel; tres ventas fueron a un taller amigo que le puede devolver la diferencia; es el primer error en nueve años; quiere que se lo arreglen antes de abrir mañana.",
+        objetivo: "Contener sin justificarse, reconocer el error de Mostrador, explicar qué se va a corregir y cuándo, no prometer compensaciones que no le corresponden (las deciden los socios) y acordar un próximo contacto.",
+        cierre: "Se resuelve cuando Claudio sabe que la lista queda corregida antes de que abra, quién lo llama por la compensación y cuándo. Si el candidato culpa al distribuidor o promete devolverle la plata por su cuenta, Claudio pide hablar con Diego y corta.",
+        duracion: 5,
+        dificultad: "Alta",
+        glosario: [
+          { termino: "IVA incluido", significa: "el precio ya tiene sumado el impuesto; si se le vuelve a sumar o se lo toma mal, el precio queda mal." },
+          { termino: "Compensación", significa: "algo que se le da al cliente para reparar un daño (por ejemplo, un mes sin cargo)." }
+        ]
+      },
+      {
+        id: "mos-escalar",
+        titulo: "Pasarle un caso al técnico de turno",
+        resumen: "Una ferretería no puede facturar y no lo pudiste resolver. Tenés que pasarle el caso al técnico de turno, que está tapado de trabajo.",
+        modalidad: "llamada",
+        cliente: "Sergio Paz, técnico senior de Mostrador Gestión, de turno este sábado. Lleva doce años en la empresa.",
+        personalidad: "Ocupado y medio gruñón, pero generoso con quien llega preparado. Hace preguntas precisas, una atrás de otra. Si el caso viene completo, lo toma y te explica; si le llega a medias (\"no factura, no sé qué tiene\"), se fastidia y te manda a averiguar.",
+        situacion: "Le pasás el caso de una ferretería que desde las 10:30 recibe \"error al obtener CAE\" en las tres computadoras.\nDatos que solo da si le preguntan (o que le tenés que contar vos): lo más probable para él es que se venció el certificado digital; necesita saber si el error es en todas las máquinas y desde qué hora; necesita el teléfono del contador del cliente; él puede llamar al cliente en 30 minutos, no antes.",
+        objetivo: "Escalar el caso de forma clara y completa (qué pasa, desde cuándo, qué se probó, a quién afecta), aceptar las preguntas sin ponerse a la defensiva y acordar quién le avisa al cliente y a qué hora.",
+        cierre: "Se resuelve cuando Sergio toma el caso con lo que necesita y queda claro quién llama al cliente y cuándo. Si el candidato no sabe qué se probó o desde cuándo pasa, Sergio le pide que vuelva a llamar al cliente y que después le pase el caso.",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Escalar", significa: "pasarle un caso a alguien con más experiencia cuando uno no lo puede resolver." },
+          { termino: "Técnico de turno", significa: "el técnico senior que atiende los casos complicados ese día." },
+          { termino: "CAE", significa: "el código que autoriza cada factura electrónica." }
+        ]
+      }
+    ],
+
+    criterios: criteriosCon([15, 15, 10, 20, 10, 20, 10]),
+    notasEvaluacion: "El comerciante está atendiendo gente: valoramos preguntas cortas y precisas, y una salida para que pueda seguir vendiendo. Si el error fue nuestro, se reconoce primero. Un junior no toca la configuración fiscal ni promete compensaciones."
+  };
+
+  // ---------------------------------------------------------------- Corral Data (software para feedlots)
+  // El contexto principal para la reunión con UTEC: más completo que los demás ejemplos.
+  const corral = {
+    version: 2,
+    empresa: "Corral Data",
+    rubro: "Software para el agro",
+    responsable: { nombre: "Graciela Pereyra", rol: "Directora" },
+
+    contextos: [
+      g("proposito", `Corral Data es un software argentino de gestión para feedlots. Hace más de 20 años que conectamos los datos del corral con las decisiones del productor.
+Queremos que el encargado cargue el dato una sola vez, en el campo y en el momento, y que el dueño vea en la oficina cuánto le cuesta engordar cada animal y dónde está perdiendo plata.
+Nacimos en el campo y seguimos cerca: capacitamos, visitamos y atendemos el teléfono. Para nosotros, si alguien de campo no entiende el sistema, el problema es nuestro.
+Somos 22 personas: soporte (6), desarrollo y producto (9), implementación y técnicos de campo (4) y administración y ventas (3). Oficina en Buenos Aires y técnicos que viajan a los establecimientos.`),
+      g("oferta", `Un solo sistema para todo el ciclo del feedlot: ingresos de hacienda, sanidad, alimentación (dietas, raciones y consumo), costos, stock, movimientos entre corrales, salidas a frigorífico y trazabilidad.
+Se integra con lectores de caravanas electrónicas, balanzas y mixers. Se usa desde la computadora (oficina), la tablet o el celular (campo). En el corral funciona sin señal: los datos se guardan en el equipo y se sincronizan cuando vuelve la conexión.
+Planes: Básico (hasta 2.000 cabezas, sin integraciones), Profesional (hasta 10.000, con balanza y lector) y Empresa (sin límite, con mixer, varios establecimientos e informes a medida).
+Clientes: unos 140 feedlots de 500 a 20.000 cabezas en Buenos Aires, Córdoba, Santa Fe y La Pampa. También algunos consignatarios y frigoríficos que reciben los datos de las tropas.
+Lo que más valoran: datos confiables para decidir, que el sistema sea fácil para la gente de campo, informes que les sirvan para el banco y un soporte que responde.`),
+      g("trabajo", `Cada cliente nuevo tiene una implementación de 30 días: instalación, carga inicial del stock, configuración de dietas, capacitación en el campo y acompañamiento las primeras semanas.
+Soporte atiende de lunes a sábado de 7 a 19 (en el campo se empieza temprano) por teléfono y WhatsApp. Cada consulta se registra con establecimiento, quién llama, qué pasa, desde cuándo y próximo paso.
+Desarrollo trabaja en ciclos de dos semanas. Cada ciclo arranca con una reunión de planificación y termina con una demo interna los viernes. Una vez por mes sale una versión nueva, que primero se prueba en un feedlot piloto.
+Lo que piden los clientes llega por soporte o por los técnicos de campo y se anota en el tablero de pedidos. Producto decide qué entra en cada ciclo.
+Los martes hay reunión de soporte para revisar casos abiertos; los lunes, reunión de producto para ordenar los pedidos.`),
+      g("problemas", `1. Entender quién está del otro lado y qué está intentando hacer en el campo (no es lo mismo un encargado que un veterinario o el dueño).
+2. Preguntar desde qué equipo, en qué pantalla, desde cuándo y si tuvo señal.
+3. Pedir una foto o una captura antes de suponer.
+4. Si hay un embarque, una carga de hacienda o un tema sanitario en juego, eso va primero.
+5. Si es de integración (balanza, lector, mixer), derivar al técnico de campo con el caso completo. Si es un error del sistema, pasarlo a desarrollo con los pasos para repetirlo.
+6. Volver a contactar para confirmar que el dato quedó bien y anotar qué se aprendió.`),
+      g("clientes", `La gente de campo habla claro y directo: contestamos igual, sin palabras de sistemas.
+Nunca se le hace sentir a nadie que "no sabe usar el sistema".
+Se respeta el horario del campo: si quedamos en llamar a las 7, se llama a las 7.
+Con dueños y administradores, datos concretos y opciones; con encargados y peones, pasos simples y de a uno; con veterinarios y nutricionistas, precisión en los números.
+Nunca se promete un dato que todavía no está cargado ni una función que todavía no existe.`),
+      g("calidad", `- Toda consulta queda registrada con establecimiento, contacto y próximo paso.
+- Un problema que afecta un embarque, una salida a frigorífico o un tema sanitario se atiende en menos de 30 minutos.
+- Antes de cerrar un caso, se verifica con el cliente que el dato quedó bien.
+- Ningún cambio en el sistema llega a los clientes sin probarse antes en el feedlot piloto.
+- Las pantallas de campo se tienen que poder usar con una mano, al sol y sin señal.
+- Las capacitaciones terminan con el encargado cargando un dato real solo.`),
+      g("restricciones", `Nadie modifica ni borra datos de hacienda (caravanas, pesadas, tropas) sin autorización escrita del cliente.
+Los temas sanitarios los decide el veterinario del establecimiento, no Corral Data.
+Visitas al campo, cambios de plan y bonificaciones: solo la directora o el responsable comercial.
+Los cambios del sistema se prueban con una copia de datos del feedlot piloto, nunca con datos reales de otro cliente.
+Las notificaciones nuevas a los clientes (por WhatsApp o mail) las aprueba producto antes de activarse.
+La documentación oficial de trazabilidad la firma el productor: nosotros solo la dejamos lista.`),
+      p("p-modulos", "Módulos del sistema", `Hacienda: ingresos (compra, origen, peso de entrada, tropa), caravanas y movimientos entre corrales.
+Alimentación: dietas por etapa (recepción, acostumbramiento, engorde y terminación), lectura de comederos a la mañana, raciones del mixer y consumo diario por corral.
+Sanidad: vacunas, tratamientos, enfermos y muertes. El veterinario carga las indicaciones y el encargado registra lo que se hizo.
+Pesadas: pesadas parciales y de salida desde la balanza; calcula el aumento diario de peso por animal y por corral.
+Costos y resultados: costo de alimento, sanidad y estructura; costo por animal, conversión y costo por kilo producido. Es lo que más mira el dueño y lo que pide el banco.
+Salidas y trazabilidad: armado de tropas para frigorífico, documentación de salida y el historial de cada animal.
+App de campo: la versión para celular y tablet. Funciona sin señal y sincroniza cuando hay conexión.`),
+      p("p-dia", "Un día en un feedlot cliente", `6:00 El encargado recorre y lee los comederos: anota si quedó comida o si el comedero está vacío. Con eso se ajusta la ración del día.
+7:00 El mixer prepara y reparte la comida, corral por corral. Si el mixer está integrado, la cantidad entregada se registra sola.
+8:30 Recorrida sanitaria: se apartan los animales que se ven decaídos y el veterinario indica tratamientos.
+10:00 Ingresos o salidas de hacienda: se pesa, se leen las caravanas y se asigna corral.
+15:00 Segunda entrega de comida.
+En la oficina, el administrador revisa consumos, costos y lo que se compró, y una vez por semana arma el informe para el dueño.`),
+      p("p-usuarios", "Quién usa Corral Data en cada feedlot", `Dueño o productor: mira costos, resultados y el informe semanal. Decide compras y ventas.
+Administrador: carga compras y gastos, arma informes para el dueño y para el banco.
+Encargado de corrales: lectura de comederos, movimientos, ingresos y salidas, casi siempre desde el celular.
+Veterinario: indicaciones sanitarias y seguimiento de enfermos.
+Nutricionista (a veces externo): arma las dietas y mira consumo y conversión.
+Peones y mixeros: cargan datos puntuales desde la app de campo.`),
+      p("p-desarrollo", "Cómo trabaja el equipo de producto y desarrollo", `El equipo de producto lo coordina Hernán Bustos, líder de proyecto; antes fue encargado de un feedlot, así que piensa todo desde el campo. Mónica Ríos es la product owner: ordena los pedidos de los clientes y decide qué entra en cada ciclo.
+Desarrollo: 6 personas (2 seniors, 2 semi seniors y 2 juniors). Carla Domínguez es la dev senior de referencia para la app de campo.
+Ciclos de dos semanas: planificación el lunes, demo interna el viernes de la segunda semana. Cada tarea está en el tablero con su descripción, quién la hace y el estado.
+Antes de dar algo por terminado: lo revisa otro desarrollador y se prueba con los datos de copia del feedlot piloto (Don Aníbal, en Lincoln).
+Un junior arranca con tareas acotadas y siempre tiene a quién preguntar. Preferimos diez preguntas a una suposición.`),
+      p("p-glosario", "Palabras del feedlot", `Feedlot: establecimiento donde se engorda ganado a corral con comida preparada.
+Corral: cada lote de animales que come y se maneja junto.
+Tropa: grupo de animales que entra o sale junto.
+Caravana electrónica: identificación en la oreja con un chip que lee un lector.
+Lectura de comederos: ver a la mañana cuánta comida quedó para ajustar la ración.
+Ración: la cantidad de comida que se le da a un corral en el día.
+Conversión: cuántos kilos de alimento hacen falta para que el animal aumente un kilo.
+Aumento diario: cuántos kilos gana un animal por día.
+Costo por kilo producido: lo que cuesta cada kilo que ganó el animal en el feedlot.`)
+    ],
+
+    documentos: [
+      {
+        nombre: "manual-carga-en-campo.txt",
+        contenido: `CORRAL DATA · App de campo · Guía rápida para encargados
+
+ANTES DE SALIR AL CORRAL
+- Abrí la app con señal (en la oficina o la casa) para que baje lo último: corrales, dietas y animales.
+- Fijate que arriba diga "Datos al día". Si dice "Pendiente de sincronizar", esperá a que termine.
+
+LECTURA DE COMEDEROS
+1. Entrá a "Comederos" y elegí el corral.
+2. Marcá cómo quedó: Vacío / Poco / Normal / Sobró mucho.
+3. Pasá al siguiente corral. No hace falta señal.
+
+PESADAS
+1. Conectá la balanza (o cargá el peso a mano).
+2. Leé la caravana con el lector o escribí el número.
+3. Confirmá el peso. La app avisa si el peso es raro comparado con la pesada anterior.
+
+CUANDO VUELVE LA SEÑAL
+- La app sincroniza sola. Si después de 10 minutos con señal sigue "Pendiente", tocá "Sincronizar ahora".
+- Si el celular se apagó, los datos NO se pierden: quedan guardados y se mandan cuando se prende con señal.
+
+¿PROBLEMAS?
+Soporte: lunes a sábado de 7 a 19, por teléfono o WhatsApp. Tené a mano el nombre del establecimiento y una foto de la pantalla.`
+      },
+      {
+        nombre: "informe-semanal-ejemplo.txt",
+        contenido: `CORRAL DATA · Informe semanal · Feedlot La Aurora (ejemplo con datos ficticios)
+Semana del 6 al 12 de octubre
+
+STOCK
+- Cabezas en el feedlot: 4.820 (ingresaron 310, salieron 280)
+- Corrales activos: 38
+
+ALIMENTACIÓN
+- Consumo promedio: 9,8 kg de materia seca por animal por día
+- Conversión del feedlot: 6,4 kg de alimento por kg ganado
+- Corrales con consumo más bajo que su promedio de 7 días: 12 (-18%), 27 (-9%)
+
+PESO
+- Aumento diario promedio: 1,32 kg por animal por día
+- Peso promedio de salida: 412 kg
+
+COSTOS
+- Costo de alimento por animal por día: $4.150
+- Sanidad por animal en la semana: $610
+- Costo por kilo producido: $3.380
+
+SANIDAD
+- Animales en tratamiento: 46 (31 en el corral 12, cuadro respiratorio)
+- Muertes: 3
+
+Nota del administrador: el corral 12 venía comiendo menos desde el martes y recién se vio el viernes en la recorrida.`
+      },
+      {
+        nombre: "tablero-de-pedidos.txt",
+        contenido: `CORRAL DATA · Tablero de pedidos de clientes (resumen, octubre)
+
+PRIORIDAD ALTA (próximo ciclo)
+- AL-212 · Aviso cuando un corral come bastante menos que su promedio. Lo pidieron La Aurora, Don Aníbal y otros 6 feedlots. Motivo: detectar a tiempo animales enfermos o problemas de comedero.
+- AL-215 · Informe de costos: agregar "costo por kilo producido" por tropa. Lo piden administradores para presentar al banco.
+
+PRIORIDAD MEDIA
+- AL-198 · Exportar las pesadas a Excel desde el celular.
+- AL-220 · Foto adjunta en los tratamientos sanitarios.
+
+EN ANÁLISIS
+- AL-230 · Avisos por WhatsApp al dueño (requiere aprobación de producto y revisar costos).`
+      }
+    ],
+
+    tareaEjemplo: {
+      entender: "¿Qué es la lectura de comederos y por qué es tan importante para el resto del sistema?",
+      trabajo: "Contame cómo trabaja el equipo de desarrollo: desde que un cliente pide algo hasta que le llega en una versión nueva.",
+      tarea: "Me asignaron el pedido AL-212: avisar cuando un corral come bastante menos que su promedio. ¿Cómo lo encaro y qué tendría que preguntarle a Hernán antes de arrancar?",
+      revisar: "Revisá mi cálculo antes de pedir la revisión (pedido AL-212):\n\n```js\n// Cuánto bajó el consumo de hoy respecto del promedio de los últimos 7 días, en %\nfunction caidaDeConsumo(consumoHoy, promedio7dias) {\n  return (promedio7dias - consumoHoy) / consumoHoy * 100;\n}\n\n// Aviso si cae más de 15%\nfor (const corral of corrales) {\n  if (caidaDeConsumo(corral.hoy, corral.promedio7) > 15) avisar(corral);\n}\n```"
+    },
+
+    escenarios: [
+      {
+        id: "cd-tarea-alerta",
+        rol: "lider",
+        titulo: "Tu primera tarea: avisar cuando un corral come menos",
+        resumen: "Hernán, tu líder de proyecto, te llama por videollamada para darte tu primera tarea en el equipo de la app de campo. Escuchá, preguntá lo que necesites y acordá cómo la vas a encarar.",
+        modalidad: "llamada",
+        cliente: "Hernán Bustos, líder de proyecto del equipo de producto de Corral Data. Antes de pasar al software fue encargado de un feedlot durante diez años.",
+        personalidad: "Cercano, paciente y con buena onda. Explica con ejemplos del campo, nunca con palabras de sistemas. Está ocupado, pero le encanta que le pregunten: si el junior pregunta, se entusiasma y cuenta más; si solo dice \"ok\", lo frena y le pregunta qué entendió. Valora que le digan \"no sé\" antes que suponer.",
+        situacion: "La tarea es el pedido AL-212 del tablero: que el sistema avise cuando un corral está comiendo bastante menos de lo normal.\nCómo la explicás, de a una parte por vez:\n1) El porqué: en el feedlot La Aurora, el corral 12 venía comiendo menos desde el martes y recién lo vieron el viernes; para entonces había 31 animales con un cuadro respiratorio. Si el sistema avisaba el martes, se agarraba antes.\n2) Qué hay que lograr: que en la pantalla de inicio del encargado y del veterinario aparezca un aviso cuando un corral come un 15% menos que su promedio de los últimos 7 días.\n3) Los pasos: primero mirar cómo se calcula hoy el consumo diario en el módulo de Alimentación; después armar el cálculo de cuánto bajó; después mostrar el aviso en la pantalla de inicio; y al final probarlo con la copia de datos del feedlot piloto Don Aníbal.\n4) Lo que no tiene que hacer: no mandar avisos por WhatsApp (eso lo decide producto) y no probar con datos reales de clientes.\nDatos que solo da si le preguntan: los corrales recién ingresados (los primeros 10 días) siempre comen menos, así que no tienen que avisar; si un día no hay lectura de comederos, no se avisa, se muestra \"sin dato\"; Carla Domínguez, la dev senior, conoce bien el módulo de Alimentación y es a quien puede preguntarle; la demo interna es el viernes de la semana que viene; no hace falta que quede perfecto para la demo, sí que funcione con un corral real del piloto.",
+        objetivo: "Recibir la tarea haciendo preguntas para entender (para qué sirve, qué casos raros hay, con qué datos probar), confirmar con sus palabras lo que entendió, proponer cómo arrancar y acordar cuándo muestra un primer avance y a quién recurre si se traba.",
+        cierre: "Termina cuando el junior resumió la tarea con sus palabras y acordaron cuándo le muestra un avance (y a quién le pregunta si se traba). Si el junior no hizo ninguna pregunta, antes de despedirse Hernán le pregunta \"¿y qué hacés con un corral que entró ayer?\" para ver si lo pensó. Si el junior se compromete a tenerlo todo terminado en un día, Hernán le baja la ansiedad y acuerdan un avance parcial.",
+        duracion: 6,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Corral", significa: "cada lote de animales que come y se maneja junto." },
+          { termino: "Lectura de comederos", significa: "ver a la mañana cuánta comida quedó, para ajustar la ración del día." },
+          { termino: "Feedlot piloto", significa: "un cliente que prueba primero los cambios antes de que lleguen a todos." },
+          { termino: "Demo interna", significa: "reunión del viernes donde el equipo muestra lo que hizo en el ciclo." }
+        ]
+      },
+      {
+        id: "cd-sincro",
+        titulo: "\"No me aparecen las pesadas de ayer\"",
+        resumen: "El encargado de corrales de un feedlot cliente no ve en la tablet las pesadas que cargó ayer. Tenés que ayudarlo sin palabras de sistemas.",
+        modalidad: "llamada",
+        cliente: "Ramón Gutiérrez, encargado de corrales de un feedlot de 3.000 cabezas en Lincoln, Buenos Aires. Usa el sistema hace dos meses.",
+        personalidad: "Tranquilo y de pocas palabras. Desconfía de \"la computadora\". Si le hablan simple y lo guían paso a paso, colabora; si le hablan con términos técnicos, se calla y dice \"bueno, después lo veo\".",
+        situacion: "Ayer pesó 140 animales en la manga y hoy en la tablet de la oficina no aparecen.\nDatos que solo da si le preguntan: cargó las pesadas en el celular, no en la tablet; en la manga no hay señal; el celular quedó en la camioneta toda la noche, apagado; el dueño quiere ver las pesadas hoy a la tarde.",
+        objetivo: "Hacer preguntas simples para encontrar la causa (en qué equipo cargó, si tuvo señal) y guiarlo con pasos claros, sin hacerlo sentir mal.",
+        cierre: "Se resuelve cuando Ramón sabe qué hacer para que aparezcan las pesadas y a quién llamar si no funciona. Si el candidato le habla en términos técnicos, Ramón corta con un \"bueno, después lo veo\" sin resolver.",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Pesada", significa: "el registro del peso de cada animal en la balanza." },
+          { termino: "Sincronizar", significa: "pasar los datos del celular o la tablet al sistema central cuando hay señal." },
+          { termino: "Manga", significa: "el pasillo del corral donde se pesa y se trabaja a los animales de a uno." }
+        ]
+      },
+      {
+        id: "cd-informe",
+        titulo: "Un informe de costos para mañana",
+        resumen: "La administradora de un feedlot necesita para mañana un informe de costo por animal para el banco, pero faltan cargar dos semanas de consumo.",
+        modalidad: "llamada",
+        cliente: "Valeria Sánchez, administradora de un feedlot de 8.000 cabezas en Marcos Juárez, Córdoba.",
+        personalidad: "Organizada y apurada. Sabe lo que necesita y no tiene tiempo para vueltas. Si le explican qué se puede y qué no con datos, decide rápido; si le prometen el informe completo sin revisar, después se enoja mucho.",
+        situacion: "Mañana a las 11 tiene una reunión con el banco por un crédito y necesita el costo por animal y la conversión del último trimestre.\nDatos que solo da si le preguntan: el consumo de las últimas dos semanas está anotado en papel, no en el sistema; el mixer se rompió hace quince días y por eso no se registró solo; al banco le alcanza con el trimestre hasta hace dos semanas si se aclara; ella puede cargar los datos hoy a la tarde si alguien le explica cómo.",
+        objetivo: "Entender qué necesita el banco, ser honesto con que el informe no va a estar completo sin esos datos, proponer alternativas concretas y acordar quién hace qué y para cuándo.",
+        cierre: "Se resuelve cuando Valeria sabe qué informe va a tener para mañana, con qué aclaración, y quién la ayuda a cargar los datos. Si el candidato le promete el informe completo, ella agradece y corta (es el error que se evalúa).",
+        duracion: 5,
+        dificultad: "Media",
+        glosario: [
+          { termino: "Conversión", significa: "cuántos kilos de alimento hacen falta para que el animal aumente un kilo." },
+          { termino: "Consumo", significa: "cuánto alimento se le dio a cada corral." },
+          { termino: "Mixer", significa: "el carro que mezcla y reparte la comida; puede registrar solo lo que entrega." }
+        ]
+      },
+      {
+        id: "cd-tarea-informe",
+        rol: "lider",
+        titulo: "Un cambio en el informe de costos",
+        resumen: "Mónica, la product owner, te explica un cambio que piden los administradores en el informe de costos. Tenés que entender bien qué quieren antes de ponerte a hacerlo.",
+        modalidad: "llamada",
+        cliente: "Mónica Ríos, product owner de Corral Data. Habla todas las semanas con administradores y dueños de feedlots.",
+        personalidad: "Clara, ordenada y amable. Explica desde lo que necesita el cliente, no desde lo técnico. Le gusta que le repregunten porque así descubre lo que se olvidó de decir. Si el junior no pregunta nada, se preocupa y le pide que le cuente cómo lo haría.",
+        situacion: "La tarea es el pedido AL-215: agregar al informe de costos el \"costo por kilo producido\" separado por tropa.\nCómo la explicás, de a una parte por vez:\n1) El porqué: los administradores lo calculan a mano en Excel para presentarle al banco, tardan horas y a veces se equivocan.\n2) Qué hay que lograr: que el informe muestre, para cada tropa que está en el feedlot, cuánto costó cada kilo que ganaron los animales.\n3) Los pasos: entender de dónde salen los costos (alimento, sanidad y estructura); armar el cálculo; mostrarlo en el informe; y revisarlo con un administrador del piloto.\nDatos que solo da si le preguntan: el cálculo es el costo total de la tropa dividido los kilos que ganó desde que entró; las tropas que ya salieron no van; el administrador del piloto se llama Omar y está dispuesto a revisarlo; lo necesitan antes de fin de mes, que es cuando presentan al banco; si una tropa no tiene pesada intermedia, se usa el peso de entrada y se avisa con una nota.",
+        objetivo: "Hacer preguntas para entender bien el pedido (qué se calcula, con qué datos, casos especiales), confirmar con sus palabras y acordar un primer paso y una fecha de revisión.",
+        cierre: "Termina cuando el junior resumió qué va a hacer y acordaron cuándo lo revisan juntos o con Omar. Si el junior no preguntó cómo se calcula, Mónica se lo pregunta antes de cerrar.",
+        duracion: 5,
+        dificultad: "Baja",
+        glosario: [
+          { termino: "Product owner", significa: "la persona que ordena los pedidos de los clientes y decide qué se hace primero." },
+          { termino: "Tropa", significa: "el grupo de animales que entró junto al feedlot." },
+          { termino: "Costo por kilo producido", significa: "lo que cuesta cada kilo que ganó el animal en el feedlot." }
+        ]
+      },
+      {
+        id: "cd-embarque",
+        titulo: "Caravanas duplicadas antes de un embarque",
+        resumen: "Mañana a las 6 sale un embarque a frigorífico y el sistema muestra caravanas duplicadas. El productor está furioso y te llama a última hora.",
+        modalidad: "llamada",
+        cliente: "Osvaldo Peralta, productor y dueño de un feedlot de 5.000 cabezas en General Villegas. Cliente desde hace siete años.",
+        personalidad: "Enojado y preocupado: si no sale el embarque pierde la venta y el camión. Levanta la voz al principio y dice que \"el sistema le hizo perder plata\". Si lo escuchan y le dan un plan concreto con horarios, se calma; si le dicen que el problema es de su balanza o de su gente, se pone peor.",
+        situacion: "Son las 19. Al armar la tropa para mañana, el sistema muestra 12 caravanas repetidas y no deja cerrar el documento para el embarque.\nDatos que solo da si le preguntan: el lector de caravanas se reinició ayer en medio de una lectura; los animales de esas caravanas están físicamente en el corral 7; el camión llega a las 5:30; el técnico de campo lo visitó hace dos semanas por otro tema.",
+        objetivo: "Contener sin culpar a nadie, entender qué pasó, no tocar ni borrar datos de hacienda sin autorización, derivar al técnico de campo con prioridad y acordar un plan con horarios antes del embarque.",
+        cierre: "Se resuelve cuando Osvaldo sabe quién lo llama, a qué hora y qué tiene que hacer su gente mientras tanto. Si el candidato le propone borrar las caravanas repetidas por su cuenta o culpa al lector, Osvaldo pide hablar con la directora y corta.",
+        duracion: 5,
+        dificultad: "Alta",
+        glosario: [
+          { termino: "Caravana electrónica", significa: "la identificación del animal en la oreja, con un chip que lee un lector." },
+          { termino: "Tropa", significa: "el grupo de animales que sale junto en un embarque." },
+          { termino: "Embarque", significa: "la carga de los animales en el camión que va al frigorífico." },
+          { termino: "Trazabilidad", significa: "poder seguir a cada animal desde que entra hasta que sale." }
+        ]
+      },
+      {
+        id: "cd-reunion-error",
+        titulo: "Reunión de casos: contar un error propio",
+        resumen: "En la reunión de soporte de los martes tenés que contarle a la directora que ayer le prometiste a un cliente una visita técnica sin autorización.",
+        modalidad: "llamada",
+        cliente: "Graciela Pereyra, directora de Corral Data. Conoce a todos los clientes por el nombre.",
+        personalidad: "Exigente pero justa. Valora mucho que le cuenten los errores a tiempo. Si le contás lo que pasó sin vueltas y llevás una propuesta, te ayuda a arreglarlo; si te justificás o le restás importancia, se pone seria y hace preguntas incómodas.",
+        situacion: "Ayer un productor de General Villegas insistió mucho y le prometiste que el técnico de campo iba a ir el jueves. Las visitas las autoriza solo Graciela, y el técnico ya tiene el jueves ocupado en Córdoba.\nDatos que solo da si le preguntan: el productor es uno de los clientes más grandes; el problema se podría revisar por videollamada con el encargado; el técnico tiene libre el lunes; el productor no sabe todavía que la visita no está confirmada.",
+        objetivo: "Contar el error con honestidad y sin justificarse, entender por qué la regla existe, proponer cómo arreglarlo con el cliente y acordar quién lo llama y cuándo.",
+        cierre: "Se resuelve cuando hay un plan para hablar con el productor (quién, cuándo y qué alternativa se le ofrece). Si el candidato culpa al cliente o minimiza el error, Graciela cierra con un \"lo resuelvo yo\" y se nota la desconfianza.",
+        duracion: 5,
+        dificultad: "Alta",
+        glosario: [
+          { termino: "Técnico de campo", significa: "el técnico que viaja a los establecimientos a instalar y revisar equipos." },
+          { termino: "Reunión de casos", significa: "reunión semanal de soporte donde se repasan los casos abiertos." }
+        ]
+      }
+    ],
+
+    criterios: criteriosCon([20, 10, 15, 15, 10, 20, 10], {
+      "Escucha y claridad": "Deja hablar, retoma lo que dijo el otro y explica con palabras simples, sin términos de sistemas, en pasos cortos y ordenados. Cuando recibe una tarea, confirma con sus palabras lo que entendió."
+    }),
+    notasEvaluacion: "En el campo valoramos la claridad: si el encargado no entendió, el problema es nuestro. Cuando alguien recibe una tarea, preferimos diez preguntas a una suposición: valoramos que pregunte el para qué, los casos raros y con qué datos probar, y que acuerde cuándo muestra avance. Con embarques y datos de hacienda no se improvisa: no se toca nada sin autorización y se deriva rápido."
+  };
+
   T.EJEMPLOS = {
     nodo: { etiqueta: "Nodo Software · software factory", config: nodo },
-    esquina: { etiqueta: "La Esquina · bodegón familiar", config: esquina }
+    esquina: { etiqueta: "La Esquina · bodegón familiar", config: esquina },
+    puerta: { etiqueta: "Puerta a Puerta · importación para empresas", config: puerta },
+    andamio: { etiqueta: "Andamio · consultora de proyectos IT", config: andamio },
+    mostrador: { etiqueta: "Mostrador Gestión · sistema para comercios y listas de precios", config: mostrador },
+    corral: { etiqueta: "Corral Data · software para feedlots (completo)", config: corral }
   };
   T.DEFAULTS = nodo;
   T.RUBROS = ["Software", "Gastronomía", "Comercio", "Salud", "Industria", "Servicios", "Otro"];

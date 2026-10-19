@@ -23,6 +23,8 @@ export async function startApp({ provider = "gemini", key = "clave-de-prueba", e
       LLM_FALLBACK: "",
       GEMINI_API_KEY: provider === "gemini" ? key : "",
       ANTHROPIC_API_KEY: provider === "anthropic" ? key : "",
+      GEMINI_LIVE_API_KEY_2: "",           // que no se cuelen las keys de respaldo del .env real
+      GEMINI_LIVE_API_KEY_3: "",
       GEMINI_BASE_URL: fake.gemini,
       ANTHROPIC_BASE_URL: fake.anthropic,
       GEMINI_LIVE_BASE_URL: fake.live,

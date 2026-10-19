@@ -226,7 +226,7 @@
       h("div", { class: "orb", "aria-hidden": "true" }),
       h("p", { class: "hello", text: `Hola, ${firstName(S.candidato)}` }),
       h("h1", { class: "ask", text: "¿Qué situación querés practicar?" }),
-      h("p", { class: "sub", text: `Hablás por voz con un cliente de ${S.cfg.empresa}. Al terminar, recibís un informe con tus fortalezas y lo que podés mejorar.` }),
+      h("p", { class: "sub", text: `Hablás por voz con un cliente o con alguien del equipo de ${S.cfg.empresa}. Al terminar, recibís un informe con tus fortalezas y lo que podés mejorar.` }),
       h("div", { class: "name-row" }, h("label", { for: "candidato", text: "Practicás como" }), nameInput),
       cards));
     const mine = S.informes.filter(r => r.candidato === S.candidato).slice(0, 5);
@@ -270,8 +270,8 @@
       h("div", null, h("div", { class: "eyebrow", text: "Palabras que vas a escuchar" }),
         h("ul", { class: "tips" }, ...e.glosario.map(g => h("li", null, h("b", { text: g.termino + ": " }), g.significa))))));
     col.append(h("ul", { class: "tips" },
-      h("li", { text: "Hablá con naturalidad. Cuando hacés una pausa, el cliente responde." }),
-      h("li", { text: "Si el cliente está hablando, tocá la esfera para interrumpirlo." }),
+      h("li", { text: `Hablá con naturalidad. Cuando hacés una pausa, ${clientName(e)} responde.` }),
+      h("li", { text: `Si ${clientName(e)} está hablando, tocá la esfera para interrumpir.` }),
       h("li", { text: enPersona(e) ? "La conversación termina cuando se despiden o cuando tocás Terminar." : "La llamada termina cuando se despiden o cuando tocás Colgar." })));
 
     if (!S.server.hasKey) col.append(h("div", { class: "notice red", text: S.server.problema || `Falta la API key: pegala en el archivo .env (${S.server.keyVar || "API key"}) y reiniciá el servidor.` }));
@@ -937,7 +937,7 @@
 
   VIEWS.escenarios = view => {
     const col = h("div", { class: "wide cfg" });
-    col.append(cfgHead("Escenarios de simulación", "Las situaciones que practican los candidatos. La IA interpreta al cliente con estos datos."));
+    col.append(cfgHead("Escenarios de simulación", "Las situaciones que practican los candidatos. La IA interpreta al cliente (o al líder que da una tarea) con estos datos."));
     const open = S.params.open;
     S.cfg.escenarios.forEach((e, i) => {
       const isOpen = open === e.id;
@@ -953,7 +953,9 @@
           field("Título", null, tin("titulo")),
           field("Resumen", "Lo que ve el candidato antes de empezar.", tin("resumen")),
           h("div", { class: "grid2" },
-            field("Cliente", "Nombre y quién es.", tin("cliente")),
+            field("Con quién habla", "Un cliente, o su líder que le asigna una tarea paso a paso.", h("select", { onchange: ev => { e.rol = ev.target.value; markDirty(); } },
+              [["cliente", "Un cliente"], ["lider", "Su líder (le da una tarea)"]].map(([v, t]) => h("option", { value: v, text: t, selected: (e.rol || "cliente") === v })))),
+            field("Persona", "Nombre y quién es.", tin("cliente")),
             field("Modalidad", null, h("select", { onchange: ev => { e.modalidad = ev.target.value; markDirty(); } },
               [["llamada", "Llamada telefónica"], ["presencial", "En persona"]].map(([v, t]) => h("option", { value: v, text: t, selected: (e.modalidad || "llamada") === v }))))),
           field("Personalidad", "Cómo habla y cómo reacciona.", tx("personalidad")),

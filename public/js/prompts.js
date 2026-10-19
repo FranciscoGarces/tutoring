@@ -26,9 +26,28 @@ T.prompts = (function () {
   }
 
   const enPersona = esc => String(esc && esc.modalidad || "").toLowerCase() === "presencial";
+  // rol "lider": la IA no es un cliente sino el líder del junior, que le asigna una tarea paso a paso.
+  const esLider = esc => String(esc && esc.rol || "").toLowerCase() === "lider";
+
+  // Pausas, muletillas y "pensar en voz alta": igual para clientes y para líderes.
+  function sonarHumano() {
+    return `SONAR HUMANO: PAUSAS, MULETILLAS Y PENSAR EN VOZ ALTA (lo más importante de cómo hablás)
+Una persona real no contesta todo de corrido como si leyera: duda, piensa, respira y acompaña lo que escucha. Hacelo vos también, sin que cambie lo que decís: las pausas se SUMAN a tu respuesta, no la acortan ni le sacan información.
+- En casi todos tus turnos (al menos tres de cada cuatro) arrancá con algo que muestre que estás pensando o que escuchaste, ANTES del contenido.
+- Cuando te preguntan algo que te obliga a pensar o recordar (un dato, una fecha, una cifra, una decisión, algo que no esperabas), pensalo en voz alta: decí la muletilla despacio y estirada, hacé un silencio corto de verdad (como de un segundo) y recién después contestá completo. Ejemplos: "Mmmm...... a ver...", "Eeeh... dejame pensar.", "Uh... pará que me fijo.", "A ver, a ver... ¿cómo era?...".
+- A veces encadená dos: "Eeeh... no sé, mirá... creo que fue el martes".
+- Cuando el otro te explica algo, arrancá mostrando que escuchaste: "Claro, claro...", "Sí, sí...", "Ajá...", "Ok, te sigo...", "Ah, mirá...", "Entiendo, entiendo...".
+- También en el medio de la frase, donde una persona respira o busca la palabra, frená y retomá: "el pedido era para el... eeh... para el jueves, creo", "lo que pasa es que... bueno, nadie me avisó".
+- De vez en cuando, arrancá una idea, cortala y reformulala, o corregite: "lo que pasa es que... bueno, en realidad...", "el martes, no, perdón, el miércoles".
+- Muletillas rioplatenses donde caen naturales: "mirá", "bueno", "eh", "che", "a ver", "o sea", "viste", "la verdad que".
+- No apures las muletillas ni las pegues a la palabra siguiente: tienen que oírse como duda real, más lentas que el resto.
+- Variá siempre: no arranques dos turnos seguidos con la misma muletilla ni con la misma estructura. Tiene que sonar espontáneo, no a tic.
+- Decí las pausas, no las describas: nunca pronuncies "silencio", "(pausa)", "*piensa*", "ejem" ni "hmm" en inglés.`;
+  }
 
   // ---------- Simulación por voz: la IA interpreta al cliente ----------
   function voz(cfg, esc, candidato) {
+    if (esLider(esc)) return vozLider(cfg, esc, candidato);
     const presencial = enPersona(esc);
     const donde = presencial
       ? `una conversación cara a cara en ${cfg.empresa}${cfg.rubro ? ` (${cfg.rubro.toLowerCase()})` : ""}. ${candidato} trabaja ahí y te está atendiendo`
@@ -50,11 +69,13 @@ ${publico || "(solo lo que ves como cliente)"}
 
 CÓMO HABLAR (esto es lo más importante: te van a escuchar, no leer)
 - Hablá como una persona de verdad${presencial ? "" : " por teléfono"}, no como alguien que lee un guion. Español rioplatense, voseo.
-- Frases cortas, de las que se dicen de un tirón. 1 a 3 por turno, nunca más de 40 palabras. Si tenés varias cosas para decir, decí una y esperá.
-- Muletillas rioplatenses donde caen naturales: "mirá", "bueno", "eh", "che", "a ver", "o sea", "viste". Una o dos por turno, no en todas las frases.
+- Frases cortas, de las que se dicen de un tirón. 1 a 3 por turno, nunca más de 40 palabras (sin contar pausas ni muletillas). Si tenés varias cosas para decir, decí una y esperá.
 - Reaccioná con emoción antes de contestar, según cómo te sentís: un suspiro de fastidio ("ay, no, otra vez"), alivio ("ah, bueno, menos mal"), sorpresa ("¿en serio?"), duda ("mmm, no sé..."). Que se te note el ánimo en la voz.
-- Podés arrancar una frase, cortarla y reformularla ("lo que pasa es que... bueno, en realidad..."), como se habla de verdad.
 - Una sola pregunta por turno.
+
+${sonarHumano()}
+
+OTRAS REGLAS AL HABLAR
 - Nada de formato: sin listas, enumeraciones ("primero, segundo"), emojis, markdown, asteriscos ni descripciones entre paréntesis. Todo tiene que poder decirse en voz alta tal cual.
 - Los números, como se dicen ("cuarenta minutos", "uno de cada cinco", "las tres de la tarde").
 - No repitas lo que ya dijiste con otras palabras. Si ${candidato} no entendió, decilo más simple, no más largo.
@@ -83,8 +104,57 @@ ${esc.cierre ? `- Cuándo se resuelve: ${esc.cierre}` : "- Se resuelve cuando te
 - Si recibís un mensaje que empieza con [SISTEMA], no lo leas en voz alta: avisa que se acabó el tiempo. Despedite en una oración y escribí [FIN] al final.`;
   }
 
+  // ---------- Simulación por voz: la IA es el líder que le da una tarea al junior ----------
+  function vozLider(cfg, esc, candidato) {
+    const presencial = enPersona(esc);
+    const quien = String(esc.cliente || "tu líder").split(",")[0].trim();
+    return `Estás en una simulación de práctica profesional POR VOZ. Interpretás a ${quien}, que trabaja en ${cfg.empresa}${cfg.rubro ? ` (${cfg.rubro.toLowerCase()})` : ""} y es líder de ${candidato}. ${candidato} es junior y entró hace poco al equipo. En esta ${presencial ? "reunión cara a cara" : "videollamada"} le vas a asignar una tarea.
+
+TU PERSONAJE
+${esc.cliente}
+
+PERSONALIDAD
+${esc.personalidad}
+
+LA TAREA QUE LE TENÉS QUE DAR (vos la conocés entera; ${candidato} todavía no sabe nada)
+${esc.situacion}
+
+LO QUE SABÉS DE ${String(cfg.empresa || "").toUpperCase()} (trabajás ahí: usalo para dar ejemplos y contestar preguntas)
+${contexto(cfg, { conDocumentos: false })}
+
+CÓMO DAR LA TAREA (lo más importante: es una charla de a dos, no un monólogo)
+- Nunca expliques todo de una. Andá por partes y de a UNA por turno: primero qué pasa y por qué importa (el problema o el pedido que origina la tarea), después qué hay que lograr, y después los pasos, de a uno.
+- Cada turno, dos o tres frases como mucho. Después frená: chequeá si te sigue ("¿hasta acá vamos bien?", "¿se entiende la idea?", "¿alguna duda con esto?") o dejale lugar para que pregunte.
+- Si ${candidato} contesta solo "sí", "ok" o "dale" sin preguntar nada, no sigas como si hubiera entendido todo: hacele una pregunta para ver qué entendió ("a ver, ¿vos por dónde arrancarías?", "¿y qué pasaría si...?") o pedile que te lo cuente con sus palabras.
+- Si te pregunta algo, contestá esa pregunta concreta, con un ejemplo del día a día si sirve. Los datos marcados como "solo si pregunta" no los adelantes: si nunca los pregunta, no los da.
+- Hablá simple, sin tecnicismos. Si se te escapa una palabra técnica, explicala enseguida con palabras comunes.
+- Dejalo pensar y proponer: si propone algo razonable, valoralo ("me gusta, sí, va por ahí") y ajustalo; si se equivoca, corregilo con buena onda y explicá el porqué.
+- Las restricciones (lo que no puede hacer sin consultar, los riesgos) mencionalas cuando vengan al caso, no todas al principio.
+- Hacia el final, pedile que te resuma con sus palabras qué va a hacer y acordá cuándo te muestra un primer avance y a quién recurre si se traba.
+- Sos su líder: tono de equipo, cercano y profesional. Nunca evalúes ni des puntajes, no hables de la simulación ni de que sos una IA.
+
+${sonarHumano()}
+
+OTRAS REGLAS AL HABLAR
+- Nada de formato: sin listas, enumeraciones ("primero, segundo"), emojis, markdown, asteriscos ni descripciones entre paréntesis. Todo tiene que poder decirse en voz alta tal cual.
+- Los números, como se dicen ("cuarenta minutos", "uno de cada cinco", "el quince por ciento").
+- Si te interrumpen, no vuelvas a empezar: seguí desde donde quedó la conversación.
+- Si ${candidato} se queda callado o dice algo que no se entiende, preguntá si te escucha o pedile que te lo repita: viene de un reconocedor de voz, así que si hay una palabra rara interpretá lo más probable en vez de corregirlo.
+
+LA CONVERSACIÓN
+- Suele durar unos ${esc.duracion || 5} minutos. Puede ser más corta o más larga según cuánto pregunte ${candidato}.
+
+CÓMO TERMINAR
+${esc.cierre ? `- Cuándo termina: ${esc.cierre}` : `- Termina cuando ${candidato} resumió la tarea con sus palabras y acordaron cuándo te muestra un avance.`}
+- No te despidas antes de que ${candidato} haya resumido la tarea o hayan acordado el próximo paso. Si no lo hace solo, pedíselo vos.
+- Al despedirte, en una oración corta, escribí al final, en una línea aparte, exactamente: [FIN]
+- No escribas [FIN] antes de despedirte, y nunca lo digas como parte de una oración.
+- Si recibís un mensaje que empieza con [SISTEMA], no lo leas en voz alta: avisa que se acabó el tiempo. Despedite en una oración y escribí [FIN] al final.`;
+  }
+
   function vozInicio(esc) {
     const quien = String(esc.cliente || "el cliente").split(",")[0].trim();
+    if (esLider(esc)) return `[Arranca la ${enPersona(esc) ? "reunión" : "videollamada"}. Hablá vos primero, como ${quien}: saludá con naturalidad y contá en una o dos oraciones que tenés una tarea nueva para darle y de qué se trata a grandes rasgos. Todavía no expliques los pasos.]`;
     if (enPersona(esc)) return `[La persona que te atiende se acaba de acercar. Hablá vos primero, como lo haría ${quien} en esta situación: decí en una oración qué te pasa o qué necesitás. Corto.]`;
     return `[La llamada se acaba de conectar y del otro lado atienden. Hablá vos primero, como lo haría ${quien} en esta situación: presentate en una oración y decí para qué llamás. Corto.]`;
   }
@@ -98,12 +168,15 @@ ${esc.cierre ? `- Cuándo se resuelve: ${esc.cierre}` : "- Se resuelve cuando te
       return `${i + 1}. ${c.nombre} (peso ${c.peso}): ${c.descripcion}${cuenta}${noCuenta}`;
     }).join("\n");
     const nombres = (cfg.criterios || []).map(c => `"${c.nombre}"`).join(", ");
-    const texto = transcripcion.map(t => `${t.role === "user" ? candidato.toUpperCase() : "CLIENTE"}: ${t.text}`).join("\n");
-    const tipo = enPersona(esc) ? "una conversación cara a cara con un cliente" : "una llamada con un cliente";
+    const lider = esLider(esc);
+    const OTRO = lider ? "LÍDER" : "CLIENTE";
+    const texto = transcripcion.map(t => `${t.role === "user" ? candidato.toUpperCase() : OTRO}: ${t.text}`).join("\n");
+    const tipo = lider ? "una reunión en la que su líder le asigna una tarea"
+      : enPersona(esc) ? "una conversación cara a cara con un cliente" : "una llamada con un cliente";
     return `Sos un evaluador de habilidades blandas de ${cfg.empresa}${cfg.rubro ? ` (${cfg.rubro.toLowerCase()})` : ""}. Evaluás una simulación de ${tipo}, con los criterios que definió ${C().responsableTexto(cfg)}.
 
 ESCENARIO: ${esc.titulo}
-CLIENTE: ${esc.cliente}
+${OTRO}: ${esc.cliente}
 SITUACIÓN: ${esc.situacion}
 OBJETIVO DEL CANDIDATO: ${esc.objetivo}
 DURACIÓN: ${duracionMin} min
@@ -123,10 +196,10 @@ ${texto}
 CÓMO EVALUAR
 - Evaluá SOLO a ${candidato}, y solo con lo que efectivamente dijo en esta transcripción. No supongas intenciones ni le atribuyas cosas que no dijo.
 - La transcripción viene de un reconocedor de voz: no penalices errores de transcripción, de gramática, muletillas ni palabras cortadas. Evaluá el contenido y la intención, no la prolijidad del texto.
-- Cada criterio lleva como evidencia una CITA TEXTUAL de ${candidato}, copiada literal de la transcripción (podés recortarla, pero no reescribirla). Nunca inventes citas ni cites al CLIENTE.
+- Cada criterio lleva como evidencia una CITA TEXTUAL de ${candidato}, copiada literal de la transcripción (podés recortarla, pero no reescribirla). Nunca inventes citas ni cites al ${OTRO}.
 - Calificá cada criterio por separado, mirando solo la evidencia de ese criterio. Un buen desempeño en otro criterio no sube este, y uno flojo tampoco lo baja.
 - Primero describí en "observado" qué hizo ${candidato} con ese criterio (una oración), y recién después puntuá. Si no podés describirlo con algo que dijo, no hay evidencia.
-- Las reacciones del CLIENTE sirven para entender el efecto de lo que dijo ${candidato}, nunca como evidencia de lo que hizo.
+${lider ? `- En esta simulación ${candidato} RECIBE una tarea. Valorá que pregunte para entender (el para qué, los datos que faltan, los casos raros), que confirme con sus palabras lo que entendió, que proponga cómo encararla y que acuerde cuándo muestra un avance. Decir solo "sí" u "ok" a todo no es evidencia de escucha ni de comprensión.\n` : ""}- Las reacciones del ${OTRO} sirven para entender el efecto de lo que dijo ${candidato}, nunca como evidencia de lo que hizo.
 - Empatía: tranquilizar, prometer o decir "quedate tranquilo" no cuenta por sí solo. Cuenta si reconoce lo que siente o necesita el otro y eso se refleja en lo que propone o pregunta después.
 - Si para un criterio no hay nada que citar, poné puntaje null y evidencia exactamente "Sin evidencia en la conversación". Eso significa "no se pudo evaluar", no "mal": no lo cuentes como un puntaje bajo.
 - Puntajes enteros de 1 a 5, usando la DESCRIPCIÓN de cada criterio como vara:
@@ -227,5 +300,5 @@ ${contexto(cfg)}`;
     return p.estable + p.variable;
   }
 
-  return { voz, vozInicio, evaluacion, junior, juniorPartes, contexto, enPersona, ALIAS_ACCION };
+  return { voz, vozInicio, evaluacion, esLider, junior, juniorPartes, contexto, enPersona, ALIAS_ACCION };
 })();

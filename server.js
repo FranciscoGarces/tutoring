@@ -92,6 +92,20 @@ const PROVIDERS = {
 };
 const CADENA = [PRIMARY, FALLBACK].filter(Boolean);
 
+// Evaluación: la calidad del informe depende de Claude, así que va primero Claude (suscripción),
+// después Claude por API (si hay ANTHROPIC_API_KEY) y recién al final el respaldo general (Gemini).
+// Se puede cambiar con LLM_EVAL_CADENA=claude-sdk,anthropic,gemini en el .env.
+const EVAL_CADENA = (() => {
+  const pedida = env("LLM_EVAL_CADENA")
+    ? env("LLM_EVAL_CADENA").split(/[,\s]+/).map(s => normProv(s, ""))
+    : [PRIMARY, "anthropic", FALLBACK];
+  return [...new Set(pedida.filter(id => id && (id === "claude-sdk" || PROVIDERS[id].key)))];
+})();
+
+// Gemini Live (motor de voz): GEMINI_API_KEY y, opcionalmente, keys de respaldo de OTRAS cuentas de Google.
+// Si una se queda sin cuota o es rechazada, la llamada siguiente (o la reconexión) usa la próxima.
+const LIVE_KEYS = [...new Set([env("GEMINI_API_KEY"), env("GEMINI_LIVE_API_KEY_2"), env("GEMINI_LIVE_API_KEY_3")].filter(Boolean))];
+
 // Caché de prompts: el principio de cada consulta (reglas, contexto de la empresa, documentos) se repite,
 // y si es idéntico el proveedor lo cobra a una fracción del precio.
 // - anthropic: se marca con cache_control (PROMPT_CACHE=off lo apaga; PROMPT_CACHE_TTL=1h dura más pero escribir cuesta el doble).
@@ -132,6 +146,11 @@ function resumenUso() {
 const T_PRIMER_TOKEN = envNum("LLM_TIMEOUT_MS", 45000);   // si no empieza a responder en este tiempo, se corta
 const T_SILENCIO_STREAM = 60000;                          // si deja de mandar texto a mitad de camino
 const MAX_REINTENTOS = 2;
+// Evaluación: un informe normal tarda ~20 s. Si Claude no terminó en EVAL_CARRERA_MS, se lanza un segundo
+// intento con Claude en paralelo y gana el primero que entregue un informe válido.
+const T_EVAL_CARRERA = envNum("EVAL_CARRERA_MS", 25000);
+// Si a mitad de la evaluación deja de llegar texto este tiempo, se da por colgado (antes eran 60 s).
+const T_EVAL_SILENCIO = envNum("EVAL_SILENCIO_MS", 20000);
 const REINTENTABLES = new Set([429, 500, 502, 503, 529]);
 
 // Voz: "gemini-live" (por defecto, voz a voz nativa), "vapi" o "browser" (voz del navegador).
@@ -141,7 +160,7 @@ const VOZ_PROVEEDORES = ["gemini-live", "vapi", "browser"];
 const VOICE = {
   provider: VOZ_PROVEEDORES.includes(env("VOICE_PROVIDER").toLowerCase()) ? env("VOICE_PROVIDER").toLowerCase() : "gemini-live",
   geminiLive: {
-    disponible: Boolean(env("GEMINI_API_KEY")),
+    disponible: LIVE_KEYS.length > 0,
     model: env("GEMINI_LIVE_MODEL") || "gemini-3.8-live",
     // "auto" elige voz femenina o masculina según el cliente del escenario.
     voice: env("GEMINI_LIVE_VOICE") || "auto",
@@ -170,6 +189,16 @@ const PUBLIC = path.resolve(__dirname, "public");
 const DATA = path.resolve(__dirname, env("DATA_DIR") || "data");
 const REPORTS = path.join(DATA, "informes");
 fs.mkdirSync(REPORTS, { recursive: true });
+// Registro de la IA en archivo (data/logs/ia-AAAA-MM-DD.log): sirve para ver qué pasó después de una demo.
+const LOGS = path.resolve(DATA, env("LOG_DIR") || "logs");
+function registrarArchivo(linea) {
+  try {
+    fs.mkdirSync(LOGS, { recursive: true });
+    const d = new Date();
+    const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    fs.appendFileSync(path.join(LOGS, `ia-${dia}.log`), `${d.toTimeString().slice(0, 8)} ${sinSecretos(linea)}\n`);
+  } catch (_) {}
+}
 
 // Límites de tamaño (el contexto de la empresa puede traer documentos).
 const LIMITS = { empresa: 8_000_000, informe: 4_000_000, mensajes: 4_000_000, maxTokens: 8192, mensajesCant: 80, caracteresPorMensaje: 400_000 };
@@ -227,7 +256,7 @@ const dormir = (ms, signal) => new Promise(r => {
 });
 
 // Nunca imprimimos ni devolvemos una key, aunque venga dentro de un mensaje de error.
-const SECRETOS = [PROVIDERS.gemini.key, PROVIDERS.anthropic.key].filter(s => s && s.length > 8);
+const SECRETOS = [PROVIDERS.gemini.key, PROVIDERS.anthropic.key, ...LIVE_KEYS].filter(s => s && s.length > 8);
 const sinSecretos = s => SECRETOS.reduce((t, k) => t.split(k).join("***"), String(s == null ? "" : s));
 
 // Lee el cuerpo como objeto JSON. Devuelve null y ya respondió el error si algo falla.
@@ -290,13 +319,50 @@ const esReintentable = e => e && e.code !== "limite_plan" && e.code !== "timeout
 const pasaAlRespaldo = e => e && e.status !== 400 && e.status !== 413 && e.code !== "filtro";
 
 // ---------- Registro en la terminal ----------
+// Cada línea va a la terminal y también a data/logs/ia-AAAA-MM-DD.log.
+// o.req: identificador corto del pedido (para seguir todos los intentos de una misma evaluación).
 function logIA(o) {
-  const partes = [`[IA] ${o.proveedor}`, o.modelo, o.purpose, `${(o.ms / 1000).toFixed(1)}s`];
+  const partes = [`[IA]${o.req ? " #" + o.req : ""} ${o.proveedor}`, o.modelo, o.purpose];
+  if (o.etiqueta) partes.push(o.etiqueta);
+  partes.push(`${(o.ms / 1000).toFixed(1)}s`);
   if (o.ok) partes.push("ok");
+  if (o.ttft != null) partes.push(`primer texto a los ${(o.ttft / 1000).toFixed(1)}s`);
+  else if (o.error && o.recibio === false) partes.push("no llegó ningún texto");
+  if (o.chars) partes.push(`${o.chars} caracteres recibidos`);
   if (o.tokens && (o.tokens.in != null || o.tokens.out != null)) partes.push(textoTokens(o.tokens));
   if (o.error) partes.push(`ERROR ${o.error.status || ""}${o.error.code ? " " + o.error.code : ""}: ${String(o.error.message).slice(0, 220)}`);
   if (o.nota) partes.push(o.nota);
-  console.log("  " + sinSecretos(partes.join(" · ")));
+  const linea = sinSecretos(partes.join(" · "));
+  console.log("  " + linea);
+  registrarArchivo(linea);
+  if (o.error) {
+    const p = pista(o.error, o.proveedor);
+    if (p) { console.log("      → " + p); registrarArchivo("      → " + p); }
+  }
+}
+// Línea suelta (resúmenes, respaldo, reintentos): terminal + archivo.
+function logLinea(texto) {
+  const t = sinSecretos(texto);
+  console.log("  " + t);
+  registrarArchivo(t);
+}
+// Qué significa el error y qué hacer, en castellano.
+function pista(e, id) {
+  if (!e) return "";
+  const c = e.code || "", s = e.status;
+  if (c === "timeout" && id === "claude-sdk") return "Claude Code (tu suscripción) no respondió a tiempo. No es falta de uso del plan: suele ser saturación momentánea de Claude o una respuesta que se colgó a mitad de camino. En la evaluación se cubre con el intento en paralelo.";
+  if (c === "timeout") return "El proveedor no respondió a tiempo (saturación o red). Se pasa al siguiente.";
+  if (c === "limite_plan") return "Se terminó el uso disponible de tu plan de Claude por ahora. Se usa el respaldo hasta que se renueve.";
+  if (c === "sesion" && id === "claude-sdk") return "La sesión de Claude Code no es válida: ejecutá `claude` en una terminal, iniciá sesión y reiniciá el servidor.";
+  if (c === "sesion") return "La key de ese proveedor fue rechazada: revisala en el .env.";
+  if (c === "missing_key") return "Falta la key en el .env: ese proveedor se saltea.";
+  if (c === "sdk") return "Claude Code no pudo responder. Probá `npm run chequeo` para ver si es la sesión o el proveedor.";
+  if (c === "network") return "Se cortó la comunicación (internet o el proceso de Claude Code). Revisá la conexión.";
+  if (c === "eval_formato" || c === "eval_incompleta") return "La IA respondió, pero el informe vino incompleto o mal formado. Se reintenta.";
+  if (s === 503 && id === "gemini") return "Saturación del lado de Google (alta demanda del modelo). No depende de tu key: otra key no lo arregla.";
+  if (s === 429 && id === "gemini") return "Se agotó la cuota de esa key de Gemini por ahora.";
+  if (s === 529 || c === "saturado") return "Claude está saturado en este momento. Se reintenta y, si sigue, se pasa al siguiente.";
+  return "";
 }
 // "tokens in=5200 (normales=300 caché: escritos=0 leídos=4900, 94% cacheado) out=410"
 function textoTokens(t) {
@@ -426,7 +492,13 @@ async function runClaudeSdk(p, ctx) {
       options: opcionesSdk({
         systemPrompt: p.system || "Sos un asistente útil. Respondés en español rioplatense.",
         model: p.model, includePartialMessages: true, abortController: ac, env: envSdk(p.max_tokens),
-        stderr: d => { if (/error/i.test(d)) ctx.log && ctx.log(String(d).trim().slice(0, 200)); }
+        // Todo lo que Claude Code escribe en stderr queda en el archivo de log; los errores también en la terminal.
+        stderr: d => {
+          const t = String(d).trim();
+          if (!t) return;
+          if (/error|fail|timeout|overload|rate|ECONN|socket/i.test(t)) ctx.log && ctx.log("Claude Code dice: " + t.slice(0, 300));
+          else registrarArchivo(`[claude-sdk stderr] ${t.slice(0, 500)}`);
+        }
       })
     });
     // Al abortar, el SDK tarda varios segundos en cerrar su proceso: no lo esperamos.
@@ -474,6 +546,8 @@ async function recorrerSdk(q, p, ctx) {
       }
       if (m.type === "auth_status" && m.error) throw provError(401, MSG_SIN_SESION, "sesion");
       if (m.type === "system" && m.subtype === "api_retry") { ctx.onRetry && ctx.onRetry(m.attempt, m.error); continue; }
+      // El proceso de Claude Code ya arrancó: sirve para saber si la demora es del arranque o de la respuesta.
+      if (m.type === "system" && m.subtype === "init") { ctx.onInit && ctx.onInit(); continue; }
       if (m.type === "result") {
         const u = m.usage || {};
         ctx.onUsage({ in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), out: u.output_tokens,
@@ -746,16 +820,25 @@ function geminiMessage(status, msg, model) {
 // ---------- Gemini Live: token efímero ----------
 // Un uso, 1 minuto para abrir la sesión y 30 para hablar, atado al modelo configurado:
 // aunque alguien lo copie del navegador, no sirve para otra cosa ni por mucho tiempo.
-async function tokenGeminiLive() {
+// Con varias keys (GEMINI_API_KEY, GEMINI_LIVE_API_KEY_2, GEMINI_LIVE_API_KEY_3): si una falla por cuota o
+// porque Google la rechaza, se pausa un rato y se usa la siguiente. Nunca se devuelve ni se imprime una key:
+// solo su número (1, 2, 3).
+const LIVE_ESTADO = LIVE_KEYS.map(() => ({ pausadaHasta: 0, motivo: "" }));
+let liveActual = 0;
+function pausarKeyLive(i, motivo, ms) {
+  if (!LIVE_ESTADO[i]) return;
+  LIVE_ESTADO[i] = { pausadaHasta: Date.now() + ms, motivo: String(motivo || "").slice(0, 160) };
+  logLinea(`[voz] key ${i + 1} de Gemini Live en pausa ${Math.round(ms / 60000)} min: ${LIVE_ESTADO[i].motivo}${LIVE_KEYS.length > 1 ? "" : " (no hay key de respaldo: sumá GEMINI_LIVE_API_KEY_2 en el .env)"}`);
+}
+async function pedirTokenLive(i) {
   const gl = VOICE.geminiLive;
-  if (!PROVIDERS.gemini.key) return { status: 503, error: "Falta GEMINI_API_KEY en el .env: Gemini Live la necesita. Creala gratis en https://aistudio.google.com/apikey y reiniciá el servidor." };
   const ahora = Date.now();
   const base = trimUrl(env("GEMINI_LIVE_BASE_URL") || "https://generativelanguage.googleapis.com");
   let r;
   try {
     r = await fetch(`${base}/v1alpha/auth_tokens`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": PROVIDERS.gemini.key },
+      headers: { "content-type": "application/json", "x-goog-api-key": LIVE_KEYS[i] },
       body: JSON.stringify({
         uses: 1,
         expireTime: new Date(ahora + 30 * 60e3).toISOString(),
@@ -768,16 +851,48 @@ async function tokenGeminiLive() {
       signal: AbortSignal.timeout(15000)
     });
   } catch (_) {
-    return { status: 502, error: "No se pudo conectar con Google para abrir la llamada de Gemini Live. Revisá la conexión a internet." };
+    return { status: 502, red: true, error: "No se pudo conectar con Google para abrir la llamada de Gemini Live. Revisá la conexión a internet." };
   }
   let j = null;
   try { j = await r.json(); } catch (_) {}
   if (!r.ok || !j || !j.name) {
     const msg = (j && j.error && j.error.message) || "";
     const st = geminiStatus(r.status, msg);
-    return { status: st >= 400 ? st : 502, error: sinSecretos(geminiMessage(r.status, msg, gl.model)).replace("Cambiá GEMINI_MODEL (o el de voz/evaluación)", "Cambiá GEMINI_LIVE_MODEL") };
+    return { status: st >= 400 ? st : 502, error: sinSecretos(geminiMessage(r.status, msg, gl.model)).replace("Cambiá GEMINI_MODEL (o el de voz/evaluación)", "Cambiá GEMINI_LIVE_MODEL").replace("La GEMINI_API_KEY del .env", `La key ${i + 1} de Gemini Live`) };
   }
   return { token: j.name, model: gl.model, expira: new Date(ahora + 30 * 60e3).toISOString() };
+}
+// opts.descartar: número de key (0, 1, 2) que el navegador vio fallar (cuota, rechazo). opts.soloKey: para el chequeo.
+async function tokenGeminiLive(opts = {}) {
+  if (!LIVE_KEYS.length) return { status: 503, error: "Falta GEMINI_API_KEY en el .env: Gemini Live la necesita. Creala gratis en https://aistudio.google.com/apikey y reiniciá el servidor." };
+  if (Number.isInteger(opts.soloKey)) {
+    if (!LIVE_KEYS[opts.soloKey]) return { status: 404, error: `No hay key ${opts.soloKey + 1} de Gemini Live en el .env.` };
+    const r = await pedirTokenLive(opts.soloKey);
+    return r.token ? { ...r, keyIndex: opts.soloKey, keys: LIVE_KEYS.length } : r;
+  }
+  if (Number.isInteger(opts.descartar) && LIVE_ESTADO[opts.descartar]) {
+    pausarKeyLive(opts.descartar, "falló en la llamada: " + (opts.motivo || "sin detalle"), 15 * 60e3);
+  }
+  // Primero las keys que no están en pausa (empezando por la última que anduvo); las pausadas, como último recurso.
+  const ahora = Date.now();
+  const todas = LIVE_KEYS.map((_, k) => (liveActual + k) % LIVE_KEYS.length);
+  const orden = [...todas.filter(k => LIVE_ESTADO[k].pausadaHasta <= ahora), ...todas.filter(k => LIVE_ESTADO[k].pausadaHasta > ahora).sort((x, y) => LIVE_ESTADO[x].pausadaHasta - LIVE_ESTADO[y].pausadaHasta)];
+  let ultimo = null;
+  for (const i of orden) {
+    const r = await pedirTokenLive(i);
+    if (r.token) {
+      if (i !== liveActual) logLinea(`[voz] Gemini Live ahora usa la key ${i + 1} de ${LIVE_KEYS.length}`);
+      liveActual = i;
+      LIVE_ESTADO[i] = { pausadaHasta: 0, motivo: "" };
+      return { ...r, keyIndex: i, keys: LIVE_KEYS.length };
+    }
+    ultimo = r;
+    logLinea(`[voz] key ${i + 1} de Gemini Live: no se pudo abrir la llamada (${r.status}): ${r.error}`);
+    // Sin internet o con el modelo mal configurado, otra key no cambia nada.
+    if (r.red || r.status === 404 || r.status === 400) break;
+    pausarKeyLive(i, r.error, r.status === 401 || r.status === 403 ? 60 * 60e3 : 15 * 60e3);
+  }
+  return ultimo;
 }
 
 const RUN = { "claude-sdk": runClaudeSdk, gemini: runGemini, anthropic: runAnthropic };
@@ -795,33 +910,41 @@ async function problemaDe(id) {
 }
 
 // Un intento contra un proveedor, con timeout hasta el primer texto y por silencio a mitad de camino.
-async function intentar(id, purpose, payload, sse, signal) {
+// opts.req: id corto del pedido (para el log). opts.etiqueta: "intento 2", "en paralelo"...
+// opts.gana(): en la evaluación, solo el intento que gana la carrera entrega el informe.
+// opts.notaCancelado: qué poner en el log si lo cancelamos nosotros (por ejemplo, porque ganó el otro intento).
+async function intentar(id, purpose, payload, sse, signal, opts = {}) {
   const prov = PROVIDERS[id];
   const model = prov.models[purpose] || prov.models.chat;
   const t0 = Date.now();
-  let empezo = false, chars = 0, usage = {}, porTimeout = false;
+  let empezo = false, recibio = false, ttft = null, tInit = null, chars = 0, usage = {}, porTimeout = false;
   let evaluacionTexto = "";
   const local = new AbortController();
   const alCortar = () => local.abort();
   signal.addEventListener("abort", alCortar, { once: true });
   let timer = null;
+  const silencio = purpose === "eval" ? T_EVAL_SILENCIO : T_SILENCIO_STREAM;
   const armar = ms => { clearTimeout(timer); timer = setTimeout(() => { porTimeout = true; local.abort(); }, ms); };
   armar(T_PRIMER_TOKEN);
+  const base = { req: opts.req, proveedor: id, modelo: model, purpose, etiqueta: opts.etiqueta };
   const ctx = {
     signal: local.signal,
     onText: t => {
       if (!t || local.signal.aborted) return;
+      if (!recibio) { recibio = true; ttft = Date.now() - t0; }
       chars += t.length;
-      armar(T_SILENCIO_STREAM);
+      armar(silencio);
       // Una evaluación se entrega completa: los reintentos no deben mezclar JSON.
       if (purpose === "eval") { evaluacionTexto += t; return; }
       if (!empezo) { empezo = true; sse.open(); }
       sse.text(t);
     },
     onUsage: u => { Object.keys(u).forEach(k => { if (u[k] != null) usage[k] = u[k]; }); },
-    onRetry: (n, err) => logIA({ proveedor: id, modelo: model, purpose, ms: Date.now() - t0, nota: `el SDK reintenta (${n}, ${err})` }),
-    log: m => logIA({ proveedor: id, modelo: model, purpose, ms: Date.now() - t0, nota: m })
+    onInit: () => { if (tInit == null) tInit = Date.now() - t0; },
+    onRetry: (n, err) => logIA({ ...base, ms: Date.now() - t0, nota: `Claude Code reintenta por su cuenta (intento ${n}${err ? ", motivo: " + err : ""})` }),
+    log: m => logIA({ ...base, ms: Date.now() - t0, nota: m })
   };
+  const notaInit = () => (tInit != null && id === "claude-sdk" ? `Claude Code arrancó en ${(tInit / 1000).toFixed(1)}s` : "");
   try {
     await RUN[id]({ ...payload, model, purpose }, ctx);
     if (!chars) throw provError(502, `${prov.name} devolvió una respuesta vacía.`, "empty");
@@ -831,27 +954,32 @@ async function intentar(id, purpose, payload, sse, signal) {
       if (!ev || !ev.criterios.length || ev.criterios.some(c => !c.nombre) || !ev.criterios.some(c => c.puntaje != null)) {
         throw provError(502, "La IA devolvió una evaluación incompleta o con formato inválido. Probá reintentar.", "eval_formato");
       }
+      if (opts.gana && !opts.gana()) {
+        sumarUso(id, usage);
+        logIA({ ...base, ms: Date.now() - t0, ok: true, ttft, tokens: usage, nota: "llegó segundo: se descarta (ya respondió el otro intento)" });
+        return { ok: true, tarde: true };
+      }
       sse.open();
       sse.text(JSON.stringify(ev));
     }
     sumarUso(id, usage);
-    logIA({ proveedor: id, modelo: model, purpose, ms: Date.now() - t0, ok: true, tokens: usage, nota: ctx.nota });
+    logIA({ ...base, ms: Date.now() - t0, ok: true, ttft, tokens: usage, nota: [notaInit(), ctx.nota].filter(Boolean).join(" · ") });
     return { ok: true };
   } catch (e) {
     if (signal.aborted) {
-      logIA({ proveedor: id, modelo: model, purpose, ms: Date.now() - t0, nota: "cancelado por el usuario" });
+      logIA({ ...base, ms: Date.now() - t0, ttft, chars, nota: (typeof opts.notaCancelado === "function" ? opts.notaCancelado() : opts.notaCancelado) || "cancelado por el usuario" });
       return { abortado: true };
     }
     let err = e;
     if (porTimeout) {
-      err = empezo
-        ? provError(504, `${prov.name} dejó de responder a mitad de camino.`, "timeout")
+      err = recibio
+        ? provError(504, `${prov.name} empezó a responder pero se quedó colgado ${Math.round(silencio / 1000)} segundos sin mandar nada.`, "timeout")
         : provError(504, `${prov.name} no empezó a responder en ${Math.round(T_PRIMER_TOKEN / 1000)} segundos.`, "timeout");
     } else if (!err || !err.status) {
       err = provError(502, `Falló la comunicación con ${prov.name}: ${(e && e.message) || e}`, "network");
     }
     sumarUso(id, usage);
-    logIA({ proveedor: id, modelo: model, purpose, ms: Date.now() - t0, error: err, tokens: usage });
+    logIA({ ...base, ms: Date.now() - t0, error: err, ttft, recibio, chars, tokens: usage, nota: notaInit() });
     return { error: err, empezo };
   } finally {
     clearTimeout(timer);
@@ -859,49 +987,158 @@ async function intentar(id, purpose, payload, sse, signal) {
   }
 }
 
+const idPedido = () => crypto.randomBytes(2).toString("hex");
+const pedidoEval = (payload, intento) => ({ ...payload, max_tokens: Math.min(LIMITS.maxTokens, Math.max(4096, payload.max_tokens) * (intento + 1)) });
+
 // Pide una respuesta con reintentos y respaldo. Emite todo por SSE al navegador.
 async function responder(purpose, payload, res, signal) {
+  if (purpose === "eval") return responderEval(payload, res, signal);
   const sse = crearSSE(res);
+  const req = idPedido();
   let ultimo = null;
   for (let i = 0; i < CADENA.length; i++) {
     const id = CADENA[i];
     if (i > 0) {
-      console.log(`  [IA] respaldo: ${CADENA[i - 1]} falló (${ultimo ? ultimo.status + " " + ultimo.message.slice(0, 120) : "?"}) → pruebo con ${id}`);
+      logLinea(`[IA] #${req} respaldo: ${CADENA[i - 1]} falló (${ultimo ? ultimo.status + " " + ultimo.message.slice(0, 120) : "?"}) → pruebo con ${id}`);
     }
     const problema = await problemaDe(id);
     if (signal.aborted) return sse.end();
     if (problema) {
-      logIA({ proveedor: id, modelo: PROVIDERS[id].models[purpose], purpose, ms: 0, error: problema });
+      logIA({ req, proveedor: id, modelo: PROVIDERS[id].models[purpose], purpose, ms: 0, error: problema });
       ultimo = problema;
       continue;
     }
     if (i > 0) { sse.open(); sse.event({ type: "provider", provider: id, name: PROVIDERS[id].detalle, fallback: true }); }
-    for (let intento = 0; intento <= MAX_REINTENTOS; intento++) {
-      const pedido = purpose === "eval"
-        ? { ...payload, max_tokens: Math.min(LIMITS.maxTokens, Math.max(4096, payload.max_tokens) * (intento + 1)) }
-        : payload;
-      const r = await intentar(id, purpose, pedido, sse, signal);
-      if (r.ok) return sse.close();
-      if (r.abortado) return sse.end();
-      ultimo = r.error;
-      if (r.empezo) { sse.error(ultimo); return sse.close(); }   // ya se mostró texto: no mezclamos proveedores
-      if (!esReintentable(ultimo) || intento === MAX_REINTENTOS) break;
-      // Cuando el proveedor está saturado, esperamos más: reintentar en 1 segundo no sirve.
-      const saturado = /saturad|overload|high demand|demanda|529|503/i.test(ultimo && ultimo.message || "");
-      const base = saturado ? 4000 : 800;
-      const espera = Math.round(base * Math.pow(3, intento) * (0.8 + Math.random() * 0.4));
-      console.log(`  [IA] reintento ${intento + 1}/${MAX_REINTENTOS} con ${id} en ${(espera / 1000).toFixed(1)}s`);
-      sse.open();
-      sse.event({ type: "retry", attempt: intento + 1, provider: id, message: "Reintentando…" });
-      await dormir(espera, signal);
-      if (signal.aborted) return sse.end();
-    }
+    const r = await conReintentos(id, purpose, payload, sse, signal, req);
+    if (r.ok) return sse.close();
+    if (r.abortado) return sse.end();
+    ultimo = r.error;
+    if (r.empezo) { sse.error(ultimo); return sse.close(); }   // ya se mostró texto: no mezclamos proveedores
     if (!pasaAlRespaldo(ultimo)) break;
   }
   const err = ultimo || provError(500, "No hay ningún proveedor de IA configurado.", "missing_key");
   if (!res.headersSent) return fail(res, err.status || 500, err.message, err.code || undefined);
   sse.error(err);
   sse.close();
+}
+
+// Intentos contra un mismo proveedor, con espera creciente entre uno y otro.
+async function conReintentos(id, purpose, payload, sse, signal, req, desde = 0) {
+  let r = null;
+  for (let intento = desde; intento <= MAX_REINTENTOS; intento++) {
+    const pedido = purpose === "eval" ? pedidoEval(payload, intento) : payload;
+    r = await intentar(id, purpose, pedido, sse, signal, { req, etiqueta: intento ? `intento ${intento + 1}` : "" });
+    if (r.ok || r.abortado || r.empezo) return r;
+    if (!esReintentable(r.error) || intento === MAX_REINTENTOS) return r;
+    // Cuando el proveedor está saturado, esperamos más: reintentar en 1 segundo no sirve.
+    const saturado = /saturad|overload|high demand|demanda|529|503/i.test(r.error && r.error.message || "");
+    const base = saturado ? 4000 : 800;
+    const espera = Math.round(base * Math.pow(3, intento - desde) * (0.8 + Math.random() * 0.4));
+    logLinea(`[IA] #${req} reintento ${intento + 1}/${MAX_REINTENTOS} con ${id} en ${(espera / 1000).toFixed(1)}s`);
+    sse.open();
+    sse.event({ type: "retry", attempt: intento + 1, provider: id, message: "Reintentando…" });
+    await dormir(espera, signal);
+    if (signal.aborted) return { abortado: true };
+  }
+  return r;
+}
+
+// Evaluación: rápida y con Claude.
+// 1) Carrera: arranca Claude (suscripción). Si falla, o si a los EVAL_CARRERA_MS todavía no terminó, arranca un
+//    segundo intento con Claude en paralelo (por API si hay ANTHROPIC_API_KEY; si no, otra vez Claude Code en un
+//    proceso nuevo). Gana el primero que entregue un informe válido y el otro se cancela.
+// 2) Si los dos fallan, sigue el resto de la cadena en orden (Claude API si no corrió, después Gemini), con reintentos.
+async function responderEval(payload, res, signal) {
+  const sse = crearSSE(res);
+  const req = idPedido();
+  const t0 = Date.now();
+  const cadena = EVAL_CADENA.length ? EVAL_CADENA : CADENA;
+  const resumen = [];
+  const terminar = (ok, id, err) => {
+    const seg = ((Date.now() - t0) / 1000).toFixed(1);
+    if (ok) logLinea(`[IA] #${req} ✓ evaluación lista con ${PROVIDERS[id].detalle} en ${seg}s${resumen.length ? " (antes fallaron: " + resumen.join("; ") + ")" : ""}`);
+    else logLinea(`[IA] #${req} ✗ la evaluación falló después de ${seg}s. Intentos: ${resumen.join("; ") || "ninguno"}. El usuario puede tocar Reintentar: la conversación no se pierde.`);
+  };
+  logLinea(`[IA] #${req} evaluación: cadena ${cadena.join(" → ")}${cadena[0] === "claude-sdk" ? ` · segundo intento en paralelo a los ${Math.round(T_EVAL_CARRERA / 1000)}s si Claude no terminó` : ""}`);
+
+  // Proveedores utilizables (sesión iniciada, key presente).
+  const usables = [];
+  for (const id of cadena) {
+    const problema = await problemaDe(id);
+    if (signal.aborted) return sse.end();
+    if (problema) { logIA({ req, proveedor: id, modelo: PROVIDERS[id].models.eval, purpose: "eval", ms: 0, error: problema }); resumen.push(`${id}: ${problema.message.slice(0, 80)}`); continue; }
+    usables.push(id);
+  }
+  let ultimo = null;
+  let resto = usables;
+  if (usables[0] === "claude-sdk") {
+    const segundo = usables.includes("anthropic") ? "anthropic" : "claude-sdk";
+    const r = await carreraEval(["claude-sdk", segundo], payload, sse, signal, req);
+    if (r.abortado) return sse.end();
+    if (r.ok) { terminar(true, r.id); return sse.close(); }
+    r.errores.forEach(x => resumen.push(`${x.id}: ${x.error.status || ""} ${x.error.message.slice(0, 80)}`));
+    ultimo = r.errores.length ? r.errores[r.errores.length - 1].error : null;
+    resto = usables.filter(id => id !== "claude-sdk" && id !== segundo);
+  }
+  for (const id of resto) {
+    if (ultimo) logLinea(`[IA] #${req} respaldo de la evaluación → pruebo con ${id}`);
+    if (id !== cadena[0]) { sse.open(); sse.event({ type: "provider", provider: id, name: PROVIDERS[id].detalle, fallback: true }); }
+    const r = await conReintentos(id, "eval", payload, sse, signal, req);
+    if (r.abortado) return sse.end();
+    if (r.ok) { terminar(true, id); return sse.close(); }
+    ultimo = r.error;
+    resumen.push(`${id}: ${ultimo.status || ""} ${ultimo.message.slice(0, 80)}`);
+    if (!pasaAlRespaldo(ultimo)) break;
+  }
+  terminar(false);
+  const err = ultimo || provError(500, "No hay ningún proveedor de IA configurado.", "missing_key");
+  if (!res.headersSent) return fail(res, err.status || 500, err.message, err.code || undefined);
+  sse.error(err);
+  sse.close();
+}
+
+// Dos intentos de evaluación que compiten. El segundo arranca si el primero falla o tarda más de T_EVAL_CARRERA.
+function carreraEval(ids, payload, sse, signal, req) {
+  return new Promise(resolve => {
+    let ganador = -1, lanzados = 0, pendientes = 0, resuelto = false, timer = null;
+    const errores = [];
+    const controles = ids.map(() => new AbortController());
+    const fin = r => { if (resuelto) return; resuelto = true; clearTimeout(timer); resolve(r); };
+    const lanzar = k => {
+      if (k < lanzados || k >= ids.length || ganador >= 0 || signal.aborted || resuelto) return;
+      lanzados = k + 1; pendientes++;
+      const ac = controles[k];
+      const enlazar = () => ac.abort();
+      signal.addEventListener("abort", enlazar, { once: true });
+      intentar(ids[k], "eval", pedidoEval(payload, 0), sse, ac.signal, {
+        req, etiqueta: k === 0 ? "" : (ids[k] === ids[0] ? "intento en paralelo (proceso nuevo)" : "intento en paralelo"),
+        gana: () => { if (ganador >= 0) return false; ganador = k; return true; },
+        notaCancelado: () => (signal.aborted ? "cancelado por el usuario" : "cancelado: el otro intento ya entregó el informe")
+      }).then(r => {
+        signal.removeEventListener("abort", enlazar);
+        pendientes--;
+        if (r.ok && !r.tarde) { controles.forEach((c, j) => { if (j !== k) c.abort(); }); return fin({ ok: true, id: ids[k] }); }
+        if (r.error) errores.push({ id: ids[k], error: r.error });
+        if (signal.aborted) { if (pendientes === 0) fin({ abortado: true }); return; }
+        // Falló antes de que arrancara el otro: no esperamos, lo lanzamos ya.
+        // Si Claude Code falló por el plan, la sesión o el modelo, repetirlo en otro proceso no sirve.
+        const repetirNoSirve = r.error && ids[k + 1] === ids[k] && ["limite_plan", "sesion", "modelo", "cuenta"].includes(r.error.code);
+        if (repetirNoSirve) lanzados = ids.length;
+        if (r.error && !repetirNoSirve && lanzados === k + 1 && k + 1 < ids.length) {
+          logLinea(`[IA] #${req} ${ids[k]} falló: arranco ya el intento con ${ids[k + 1]}`);
+          lanzar(k + 1);
+        }
+        if (pendientes === 0 && ganador < 0) fin({ ok: false, errores });
+      });
+    };
+    timer = setTimeout(() => {
+      if (ganador < 0 && lanzados === 1 && !signal.aborted) {
+        logLinea(`[IA] #${req} Claude lleva ${Math.round(T_EVAL_CARRERA / 1000)}s sin terminar: lanzo un segundo intento en paralelo con ${ids[1]}`);
+        lanzar(1);
+      }
+    }, T_EVAL_CARRERA);
+    lanzar(0);
+  });
 }
 
 // ---------- Diagnóstico ----------
@@ -965,6 +1202,51 @@ async function handleApi(req, res, url) {
     return json(res, 200, { principal, respaldo, activo: principal.ok ? PRIMARY : respaldo && respaldo.ok ? FALLBACK : null, cache: resumenUso() });
   }
 
+  // Chequeo antes de una demo (npm run chequeo). No tiene botón en la interfaz: se usa solo desde la consola.
+  if (url.pathname.startsWith("/api/chequeo/")) {
+    const ip = String(req.socket.remoteAddress || "");
+    if (!/^(127\.|::1$|::ffff:127\.)/.test(ip)) return fail(res, 403, "Solo desde esta compu.");
+    if (url.pathname === "/api/chequeo/estado" && req.method === "GET") {
+      if (CADENA.includes("claude-sdk") || EVAL_CADENA.includes("claude-sdk")) await verificarSesionClaude();
+      return json(res, 200, {
+        principal: PRIMARY, respaldo: FALLBACK, cadenaEval: EVAL_CADENA, carreraMs: T_EVAL_CARRERA,
+        modelos: Object.fromEntries(IDS.map(id => [id, PROVIDERS[id].models])),
+        claudeSdk: { estado: SDK_STATE.estado, plan: SDK_STATE.plan, mensaje: SDK_STATE.mensaje },
+        anthropicKey: Boolean(PROVIDERS.anthropic.key), geminiKey: Boolean(PROVIDERS.gemini.key),
+        voz: VOICE.provider, liveModelo: VOICE.geminiLive.model, liveKeys: LIVE_KEYS.length,
+        liveVoces: [VOICE.geminiLive.voiceFemenina, VOICE.geminiLive.voiceMasculina], logs: LOGS
+      });
+    }
+    if (url.pathname === "/api/chequeo/ia" && req.method === "POST") {
+      const body = await bodyObject(req, res, LIMITS.mensajes, "");
+      if (!body) return;
+      const id = normProv(body.id, "");
+      if (!id) return fail(res, 400, "Proveedor desconocido.");
+      const purpose = ["chat", "eval", "voice"].includes(body.purpose) ? body.purpose : "chat";
+      const payload = body.payload ? sanitizePayload(body.payload) : { system: "Respondés con una sola palabra.", messages: [{ role: "user", content: "Decí: listo" }], max_tokens: 32 };
+      const problema = await problemaDe(id);
+      if (problema) return json(res, 200, { ok: false, ms: 0, error: problema.message, pista: pista(problema, id) });
+      let salida = "";
+      const sse = { open() {}, text: t => { salida += t; }, event() {}, error() {}, close() {}, end() {} };
+      const ac = new AbortController();
+      res.on("close", () => { if (!res.writableEnded) ac.abort(); });
+      const t0 = Date.now();
+      const r = await intentar(id, purpose, purpose === "eval" ? pedidoEval(payload, 0) : payload, sse, ac.signal, { req: "chk", etiqueta: "chequeo" });
+      const out = { ok: Boolean(r.ok), ms: Date.now() - t0, modelo: PROVIDERS[id].models[purpose] || PROVIDERS[id].models.chat };
+      if (r.ok && purpose === "eval") { try { out.criterios = JSON.parse(salida).criterios.length; } catch (_) {} }
+      else if (r.ok) out.respuesta = salida.trim().slice(0, 60);
+      if (r.error) { out.error = r.error.message; out.pista = pista(r.error, id); }
+      return json(res, 200, out);
+    }
+    if (url.pathname === "/api/chequeo/live" && req.method === "POST") {
+      const body = await bodyObject(req, res, 4096, "");
+      if (!body) return;
+      const r = await tokenGeminiLive({ soloKey: Number.isInteger(body.key) ? body.key : 0 });
+      return r.token ? json(res, 200, { ...r, wsUrl: VOICE.geminiLive.wsUrl }) : json(res, 200, { error: r.error, status: r.status });
+    }
+    return fail(res, 404, "Ruta no encontrada");
+  }
+
   // Consulta a la IA
   if (url.pathname === "/api/messages") {
     if (req.method !== "POST") return fail(res, 405, "Método no permitido");
@@ -983,7 +1265,13 @@ async function handleApi(req, res, url) {
   // (sin pasar el audio por nuestro servidor) y la GEMINI_API_KEY no sale de acá.
   if (url.pathname === "/api/voz/token") {
     if (req.method !== "POST") return fail(res, 405, "Método no permitido");
-    const r = await tokenGeminiLive();
+    // El cuerpo es opcional: {descartar, motivo} cuando la key anterior falló en el navegador.
+    let pedido = {};
+    try { const raw = await readBody(req, 4096); pedido = raw ? JSON.parse(raw) : {}; } catch (_) {}
+    const r = await tokenGeminiLive({
+      descartar: isObj(pedido) && Number.isInteger(pedido.descartar) ? pedido.descartar : undefined,
+      motivo: isObj(pedido) && typeof pedido.motivo === "string" ? pedido.motivo.slice(0, 160) : ""
+    });
     const maxMinutos = Math.min(60, Math.max(1, Number(process.env.CALL_MAX_MINUTES) || 15));
     return r.error ? fail(res, r.status, r.error) : json(res, 200, { ...r, maxMinutos });
   }
@@ -1116,6 +1404,9 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(`\n  Tutoring corriendo en  http://localhost:${server.address().port}\n`);
   console.log(`  IA principal: ${descProv(PRIMARY)}`);
   console.log(`  IA de respaldo: ${FALLBACK ? descProv(FALLBACK) : "ninguna (LLM_FALLBACK vacío)"}`);
+  console.log(`  Evaluación: ${EVAL_CADENA.map(id => PROVIDERS[id].detalle).join(" → ")}${EVAL_CADENA[0] === "claude-sdk" ? ` · intento en paralelo a los ${Math.round(T_EVAL_CARRERA / 1000)}s si Claude no terminó` : ""}`);
+  if (EVAL_CADENA[0] === "claude-sdk" && !PROVIDERS.anthropic.key) console.log("  (Sin ANTHROPIC_API_KEY: el intento en paralelo usa otra vez Claude Code. Con la key, usa Claude por API.)");
+  console.log(`  Registro de la IA: ${LOGS}`);
   console.log(`  Caché de prompts: ${CACHE.activo ? `activo (duración ${CACHE.ttl}). El ahorro se ve en /api/diagnostico` : "apagado (PROMPT_CACHE=off)"}`);
   for (const id of CADENA) {
     if (id !== "claude-sdk" && !PROVIDERS[id].key) console.log(`  Atención: falta ${PROVIDERS[id].keyVar} en el archivo .env`);
@@ -1124,7 +1415,7 @@ server.listen(PORT, "127.0.0.1", () => {
     console.log("  Voz: gemini-live · ATENCIÓN: falta GEMINI_API_KEY en el .env. Mientras tanto se usa " + (VOICE.vapiPublicKey ? "Vapi" : "la voz del navegador") + ".\n");
   } else if (VOICE.provider === "gemini-live") {
     const gl = VOICE.geminiLive;
-    console.log(`  Voz: gemini-live · modelo ${gl.model} · voz ${gl.voice === "auto" ? `${gl.voiceFemenina} / ${gl.voiceMasculina}` : gl.voice} (voz a voz nativa)\n`);
+    console.log(`  Voz: gemini-live · modelo ${gl.model} · voz ${gl.voice === "auto" ? `${gl.voiceFemenina} / ${gl.voiceMasculina}` : gl.voice} (voz a voz nativa) · ${LIVE_KEYS.length} key${LIVE_KEYS.length === 1 ? " (sin respaldo: sumá GEMINI_LIVE_API_KEY_2)" : "s (con respaldo)"}\n`);
   } else if (VOICE.provider === "vapi" && !VOICE.vapiPublicKey) {
     console.log("  Voz: vapi · ATENCIÓN: falta VAPI_PUBLIC_KEY en el .env. Mientras tanto se usa la voz del navegador.\n");
   } else if (VOICE.provider === "vapi") {
