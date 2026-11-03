@@ -301,6 +301,18 @@ describe("servidor con Claude (anthropic)", () => {
     assert.ok(!/clave-de-prueba/.test(r.bruto));
   });
 
+  test("la llamada y su informe suman una línea [SIM] en el log", async () => {
+    const simulacion = "sim-prueba-1";
+    const uso = { simulacion, modelo: "gemini-3.8-live", segundos: 60, turnos: 2, entrada: 1000, entradaTexto: 1000, entradaAudio: 0, salida: 0, salidaAudio: 0, salidaTexto: 0, pensamiento: 0 };
+    assert.equal((await pedir(app.base, "/api/voz/uso", { method: "POST", json: uso })).status, 200);
+    const r = await pedirMensajes(app.base, { purpose: "eval", simulacion, system: "Sos un evaluador riguroso y justo.", messages: [{ role: "user", content: "evaluá esto" }] });
+    assert.equal(r.status, 200);
+    assert.ok(!("simulacion" in app.fake.calls.at(-1).payload), "el id de simulación no llega al proveedor");
+    const dir = path.join(app.dataDir, "logs");
+    const log = fs.readFileSync(path.join(dir, fs.readdirSync(dir).find(f => /^ia-.*\.log$/.test(f))), "utf8");
+    assert.match(log, /\[SIM\] #\w+ simulación · llamada US\$0\.0008 \+ informe US\$0\.0000 \(una parte sin precio\) = total US\$0\.0008/);
+  });
+
   test("messages: manda x-api-key y no la expone", async () => {
     const llamada = app.fake.calls.at(-1);
     assert.equal(llamada.auth, "clave-de-prueba");
@@ -344,6 +356,16 @@ describe("voz con Gemini Live: token efímero", () => {
     const vence = Date.parse(pedido.payload.expireTime) - Date.now();
     assert.ok(vence > 25 * 60e3 && vence <= 30 * 60e3, "vence en unos 30 minutos");
     assert.ok(Date.parse(pedido.payload.newSessionExpireTime) - Date.now() <= 60e3, "hay que abrir la sesión en menos de un minuto");
+  });
+
+  test("POST /api/voz/uso escribe los tokens de la llamada en el log de la IA", async () => {
+    const uso = { modelo: "gemini-test-live", segundos: 95, turnos: 4, entrada: 2400, entradaTexto: 1500, entradaAudio: 900, salida: 310, salidaAudio: 300, salidaTexto: 10, pensamiento: 120 };
+    const { status } = await pedir(app.base, "/api/voz/uso", { method: "POST", json: uso });
+    assert.equal(status, 200);
+    const dir = path.join(app.dataDir, "logs");
+    const archivo = fs.readdirSync(dir).find(f => /^ia-.*\.log$/.test(f));
+    const log = fs.readFileSync(path.join(dir, archivo), "utf8");
+    assert.match(log, /\[VOZ\] gemini-live · gemini-test-live · llamada · 95s .*4 turnos · tokens in=2400 \(texto=1500 audio=900\) out=310 \(audio=300 texto=10\) pensamiento=120/);
   });
 
   test("GET /api/voz/token no está permitido", async () => {

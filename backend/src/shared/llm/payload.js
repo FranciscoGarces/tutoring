@@ -30,6 +30,8 @@ function sanitizePayload(payload) {
   if (out.system && out.system.length === payload.system.length && Number.isInteger(est) && est > 0 && est < out.system.length) out.systemEstable = est;
   const mt = Number(payload.max_tokens);
   out.max_tokens = Number.isFinite(mt) ? Math.min(LIMITS.maxTokens, Math.max(16, Math.round(mt))) : 1024;
+  // Une el informe con su llamada para sumar los costos en el log. No llega al modelo.
+  if (typeof payload.simulacion === "string" && /^[\w-]{1,40}$/.test(payload.simulacion)) out.simulacion = payload.simulacion;
   const temp = Number(payload.temperature);
   if (Number.isFinite(temp)) out.temperature = Math.min(1, Math.max(0, temp));
   return out;

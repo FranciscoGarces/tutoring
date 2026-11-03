@@ -495,7 +495,10 @@
     }
     const LABEL = { connecting: "Conectando…", listening: "Te escucho", thinking: `${firstName(cName)} está pensando`, speaking: `${firstName(cName)} está hablando · tocá para interrumpir`, ended: "Llamada terminada" };
 
+    // Une la llamada con su informe para sumar los costos en el log del servidor.
+    S.simulacion = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
     const engine = T.voice.create(provider, {
+      simulacion: S.simulacion,
       voiceName: S.voiceName,
       vapiPublicKey: S.server.voice.vapiPublicKey,
       vapiAssistantId: S.server.voice.vapiAssistantId,
@@ -674,7 +677,7 @@
     clearInterval(S.timer);
     S.engine = null;
     const userTurns = turns.filter(t => t.role === "user").length;
-    S.lastCall = { escenario: e, turns: turns.slice(), seconds, reason };
+    S.lastCall = { escenario: e, turns: turns.slice(), seconds, reason, simulacion: S.simulacion };
     if (userTurns < 2) return go("corta", { id: e.id });
     go("evaluating");
   }
@@ -711,7 +714,7 @@
       let report = call.pendingReport;
       if (!report) {
         const text = await T.api.claude({
-          purpose: "eval", maxTokens: 2500,
+          purpose: "eval", maxTokens: 2500, simulacion: call.simulacion,
           onStatus: msg => { if (vigente()) { const st = box.querySelector(".sub"); if (st) st.textContent = msg; } },
           system: "Sos un evaluador riguroso y justo. Respondés solo con un objeto JSON válido, sin texto alrededor.",
           messages: [{ role: "user", content: T.prompts.evaluacion(cfg, e, call.turns, S.candidato, Math.max(1, Math.round(call.seconds / 60))) }]

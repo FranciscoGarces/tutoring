@@ -4,6 +4,8 @@ const { LIMITS } = require("../../config/limits");
 const { PROVIDERS, T_PRIMER_TOKEN, T_SILENCIO_STREAM, T_EVAL_SILENCIO, MAX_REINTENTOS } = require("./providers.config");
 const { provError, esReintentable } = require("./errores");
 const { sumarUso } = require("./uso");
+const { costoClaude } = require("../utils/precios");
+const { intentoDeInforme } = require("../utils/costo-simulacion");
 const { logIA } = require("./log");
 const { logLinea } = require("../utils/registro");
 const { dormir } = require("../utils/tiempo");
@@ -60,6 +62,11 @@ async function intentar(id, purpose, payload, sse, signal, opts = {}) {
     onRetry: (n, err) => logIA({ ...base, ms: Date.now() - t0, nota: `Claude Code reintenta por su cuenta (intento ${n}${err ? ", motivo: " + err : ""})` }),
     log: m => logIA({ ...base, ms: Date.now() - t0, nota: m })
   };
+  // Lo gastado en este intento: los que fallan también cuentan para el costo del informe.
+  const contarUso = () => {
+    sumarUso(id, usage);
+    if (purpose === "eval") intentoDeInforme(opts.req, id === "gemini" ? null : costoClaude(model, usage), id === "claude-sdk");
+  };
   const notaInit = () => (tInit != null && id === "claude-sdk" ? `Claude Code arrancó en ${(tInit / 1000).toFixed(1)}s` : "");
   try {
     await RUN[id]({ ...payload, model, purpose }, ctx);
@@ -71,14 +78,14 @@ async function intentar(id, purpose, payload, sse, signal, opts = {}) {
         throw provError(502, "La IA devolvió una evaluación incompleta o con formato inválido. Probá reintentar.", "eval_formato");
       }
       if (opts.gana && !opts.gana()) {
-        sumarUso(id, usage);
+        contarUso();
         logIA({ ...base, ms: Date.now() - t0, ok: true, ttft, tokens: usage, nota: "llegó segundo: se descarta (ya respondió el otro intento)" });
         return { ok: true, tarde: true };
       }
       sse.open();
       sse.text(JSON.stringify(ev));
     }
-    sumarUso(id, usage);
+    contarUso();
     logIA({ ...base, ms: Date.now() - t0, ok: true, ttft, tokens: usage, nota: [notaInit(), ctx.nota].filter(Boolean).join(" · ") });
     return { ok: true };
   } catch (e) {
@@ -94,7 +101,7 @@ async function intentar(id, purpose, payload, sse, signal, opts = {}) {
     } else if (!err || !err.status) {
       err = provError(502, `Falló la comunicación con ${prov.name}: ${(e && e.message) || e}`, "network");
     }
-    sumarUso(id, usage);
+    contarUso();
     logIA({ ...base, ms: Date.now() - t0, error: err, ttft, recibio, chars, tokens: usage, nota: notaInit() });
     return { error: err, empezo };
   } finally {

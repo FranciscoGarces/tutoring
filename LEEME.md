@@ -183,7 +183,7 @@ Hay tres motores con la misma interfaz (la app no cambia):
 
 | `VOICE_PROVIDER` | Cómo se siente | Costo |
 |---|---|---|
-| `gemini-live` (por defecto) | Voz a voz nativa: el modelo escucha y habla directo, sin pasar por texto. Entona, reacciona, usa muletillas y se lo interrumpe hablando encima | Gratis con el plan gratuito de Gemini; pago: ~US$ 0,02 por minuto |
+| `gemini-live` (por defecto) | Voz a voz nativa: el modelo escucha y habla directo, sin pasar por texto. Entona, reacciona, usa muletillas y se lo interrumpe hablando encima | Gratis con el plan gratuito de Gemini; pago: ~US$ 0,04 por minuto |
 | `vapi` | Cadena voz → texto → IA → voz. Natural y con interrupciones, pero se nota más "leído" | Por minuto de llamada (Vapi) |
 | `browser` | Voz del navegador (Chrome/Edge). Por turnos: hablás, pausa, contesta | Gratis |
 
@@ -217,7 +217,7 @@ Si el motor elegido no está configurado (falta su key), la app usa el siguiente
 **Plan gratuito y costo:**
 - Con el plan gratuito de la API de Gemini, `gemini-3.8-live` no cobra ni la entrada ni la salida. Los límites del plan gratuito (sesiones simultáneas, pedidos por minuto y por día) dependen del proyecto y Google no los publica fijos para Live: se ven en AI Studio → **Rate limits**. Si se agotan, la llamada lo explica y ofrece **Seguir con otra voz**.
 - **Ojo:** en el plan gratuito Google puede usar lo que se manda para mejorar sus productos. Por eso, en el plan gratuito no cargues datos reales de personas ni de clientes.
-- En el plan pago, Google cobra el audio por minuto: US$ 0,005 por minuto de audio que escucha y US$ 0,018 por minuto de audio que habla. Como el micrófono se transmite toda la llamada y el cliente habla más o menos la mitad del tiempo, da **~US$ 0,015 a 0,025 por minuto**: una simulación de 5 minutos sale unos 10 centavos de dólar. (Precios de octubre de 2026: https://ai.google.dev/gemini-api/docs/pricing.)
+- En el plan pago, Google publica por millón de tokens: entrada US$ 0,75 (texto) y US$ 3 (audio, o US$ 0,005 por minuto); salida US$ 4,50 (texto y pensamiento) y US$ 12 (audio, o US$ 0,018 por minuto). Con esos precios y sumando los tokens que informa Google en cada turno, las 7 llamadas de prueba del 2026-11-03 dan **~US$ 0,04 por minuto** (una simulación de 5 minutos, unos 20 centavos). Es una estimación: pesa mucho el prompt, que se vuelve a contar en cada turno, y falta compararla con lo que muestra la facturación de Google. Contando solo los minutos de audio daría cerca de un tercio. Los precios están en `backend/src/shared/utils/precios.js` y el costo de cada llamada queda en `data/logs/ia-AAAA-MM-DD.log` (`npm run costos` lo suma). (Precios de noviembre de 2026: https://ai.google.dev/gemini-api/docs/pricing.)
 
 **Latencia medida** (fin de la frase del estudiante → el cliente empieza a hablar; mismo escenario y mismo audio de estudiante, Chrome, 6 mediciones por motor, octubre de 2026):
 
