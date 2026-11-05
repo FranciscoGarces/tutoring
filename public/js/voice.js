@@ -890,8 +890,31 @@ registerProcessor("mic-pcm", MicPcm);`;
     }
 
     // ----- Mensajes de Gemini -----
+    // Tokens que gasta la llamada (Gemini manda usageMetadata una vez por turno; promptTokenCount ya incluye
+    // todo el contexto de ese turno, así que sumar mensaje a mensaje da lo que se factura).
+    const uso = { turnos: 0, entrada: 0, salida: 0, pensamiento: 0, entradaTexto: 0, entradaAudio: 0, salidaAudio: 0, salidaTexto: 0 };
+    let usoEnviado = false;
+    function sumarUso(u) {
+      const por = (lista, mod) => ((lista || []).find(d => d.modality === mod) || {}).tokenCount || 0;
+      uso.turnos++;
+      uso.entrada += u.promptTokenCount || 0;
+      uso.salida += u.responseTokenCount || 0;
+      uso.pensamiento += u.thoughtsTokenCount || 0;
+      uso.entradaTexto += por(u.promptTokensDetails, "TEXT");
+      uso.entradaAudio += por(u.promptTokensDetails, "AUDIO");
+      uso.salidaAudio += por(u.responseTokensDetails, "AUDIO");
+      uso.salidaTexto += por(u.responseTokensDetails, "TEXT");
+    }
+    function informarUso() {
+      if (usoEnviado || !uso.turnos) return;
+      usoEnviado = true;
+      const cuerpo = { ...uso, simulacion: opts.simulacion, modelo: gl.model || "gemini-3.8-live", segundos: sesionInicio ? Math.round((Date.now() - sesionInicio) / 1000) : null };
+      console.info("[voz] tokens de la llamada", cuerpo);
+      try { fetch("/api/voz/uso", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cuerpo), keepalive: true }).catch(() => {}); } catch (_) {}
+    }
     function alMensaje(m) {
       if (ended) return;
+      if (m.usageMetadata) sumarUso(m.usageMetadata);
       if (m.setupComplete) return sesionLista();
       if (m.sessionResumptionUpdate) {
         const u = m.sessionResumptionUpdate;
@@ -954,6 +977,7 @@ registerProcessor("mic-pcm", MicPcm);`;
       clearTimeout(setupTimer);
       if (reintentos) { console.info("[voz] reconectado", new Date().toLocaleTimeString("es-AR")); aviso(""); }
       reintentos = 0;
+      if (!sesionInicio) sesionInicio = Date.now();
       if (!handle) sesionDesde = Date.now();   // sesión nueva (no retomada): desde acá cuenta para renovarla
       if (conectado) { setState("listening"); return; }   // reconexión: la conversación sigue donde estaba
       conectado = true;
@@ -1043,7 +1067,7 @@ registerProcessor("mic-pcm", MicPcm);`;
     // hablar, abrimos en paralelo una sesión nueva con lo hablado como texto y, cuando está lista, le
     // pasamos el micrófono y cerramos la vieja: no hay corte. Si mientras tanto alguien habló, se descarta
     // y se prueba en el próximo silencio.
-    let renovando = null, sesionDesde = 0;
+    let renovando = null, sesionDesde = 0, sesionInicio = 0;
     async function quizasRenovar() {
       if (renovando || ended || !conectado || finPendiente || state !== "listening") return;
       if (Date.now() - sesionDesde < AJUSTES.renovarMs || self.history.length < 2) return;
@@ -1188,6 +1212,7 @@ registerProcessor("mic-pcm", MicPcm);`;
     }
     function liberar() {
       clearTimeout(setupTimer); clearTimeout(finTimer);
+      informarUso();
       cancelAnimationFrame(raf); raf = 0;
       cortarAudio();
       if (ws) { const w = ws; ws = null; try { w.close(1000); } catch (_) {} }

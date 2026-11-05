@@ -35,7 +35,7 @@ T.api = (function () {
   // onStatus(texto): avisos mientras espera, por ejemplo "Reintentando…".
   // systemEstable (opcional): cuántos caracteres del principio de `system` no cambian entre consultas.
   // El servidor lo usa para el caché de prompts; el texto que recibe el modelo es el mismo.
-  async function claude({ purpose = "chat", system, systemEstable, messages, maxTokens = 1024, onText, onStatus, signal }) {
+  async function claude({ purpose = "chat", system, systemEstable, messages, maxTokens = 1024, onText, onStatus, signal, simulacion }) {
     const historial = T.core.normalizarHistorial(messages, 40);
     if (!historial.length) throw Object.assign(new Error("No hay nada para enviar."), { status: 400 });
 
@@ -45,7 +45,7 @@ T.api = (function () {
         method: "POST",
         signal,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ purpose, system, system_estable: systemEstable, messages: historial, max_tokens: maxTokens, stream: true })
+        body: JSON.stringify({ purpose, system, system_estable: systemEstable, messages: historial, max_tokens: maxTokens, stream: true, simulacion })
       });
     } catch (e) {
       if (e && e.name === "AbortError") throw e;

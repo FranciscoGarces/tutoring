@@ -2,6 +2,7 @@ const { PROVIDERS, CADENA, EVAL_CADENA, T_EVAL_CARRERA } = require("./providers.
 const { provError, pasaAlRespaldo } = require("./errores");
 const { logIA } = require("./log");
 const { logLinea } = require("../utils/registro");
+const { informeTerminado } = require("../utils/costo-simulacion");
 const { crearSSE } = require("../http/sse");
 const { fail } = require("../http/respuesta");
 const { problemaDe, intentar, idPedido, pedidoEval, conReintentos } = require("./intentos");
@@ -20,6 +21,7 @@ async function responderEval(payload, res, signal) {
     const seg = ((Date.now() - t0) / 1000).toFixed(1);
     if (ok) logLinea(`[IA] #${req} ✓ evaluación lista con ${PROVIDERS[id].detalle} en ${seg}s${resumen.length ? " (antes fallaron: " + resumen.join("; ") + ")" : ""}`);
     else logLinea(`[IA] #${req} ✗ la evaluación falló después de ${seg}s. Intentos: ${resumen.join("; ") || "ninguno"}. El usuario puede tocar Reintentar: la conversación no se pierde.`);
+    informeTerminado(req, payload.simulacion, ok);
   };
   logLinea(`[IA] #${req} evaluación: cadena ${cadena.join(" → ")}${cadena[0] === "claude-sdk" ? ` · segundo intento en paralelo a los ${Math.round(T_EVAL_CARRERA / 1000)}s si Claude no terminó` : ""}`);
 

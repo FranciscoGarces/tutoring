@@ -1,5 +1,6 @@
 const { sinSecretos } = require("../utils/secretos");
 const { registrarArchivo } = require("../utils/registro");
+const { costoClaude, textoUsd } = require("../utils/precios");
 // ---------- Registro en la terminal ----------
 // Cada línea va a la terminal y también a data/logs/ia-AAAA-MM-DD.log.
 // o.req: identificador corto del pedido (para seguir todos los intentos de una misma evaluación).
@@ -12,6 +13,8 @@ function logIA(o) {
   else if (o.error && o.recibio === false) partes.push("no llegó ningún texto");
   if (o.chars) partes.push(`${o.chars} caracteres recibidos`);
   if (o.tokens && (o.tokens.in != null || o.tokens.out != null)) partes.push(textoTokens(o.tokens));
+  const costo = o.proveedor === "gemini" ? null : costoClaude(o.modelo, o.tokens);
+  if (costo != null) partes.push(textoCosto(costo, o.proveedor));
   if (o.error) partes.push(`ERROR ${o.error.status || ""}${o.error.code ? " " + o.error.code : ""}: ${String(o.error.message).slice(0, 220)}`);
   if (o.nota) partes.push(o.nota);
   const linea = sinSecretos(partes.join(" · "));
@@ -49,4 +52,8 @@ function textoTokens(t) {
   }
   return s + ` out=${t.out ?? "?"}`;
 }
-module.exports = { logIA, pista, textoTokens };
+// Con la suscripción (claude-sdk) no se paga por token: el número es lo que costaría por la API.
+function textoCosto(usd, proveedor) {
+  return proveedor === "claude-sdk" ? `costo equivalente por API ${textoUsd(usd)} (con la suscripción no se paga por token)` : `costo ${textoUsd(usd)}`;
+}
+module.exports = { logIA, pista, textoTokens, textoCosto };
